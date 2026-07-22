@@ -1,0 +1,16 @@
+{
+  "name": "elite360-whatsapp-chatbot",
+  "version": "1.0.0",
+  "description": "Chatbot de WhatsApp para a Elite 360 usando Gemini AI para qualificação de leads",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.5",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

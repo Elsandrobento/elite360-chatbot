@@ -1,0 +1,41 @@
+[
+  {
+    "nome": "Elsandro Bento",
+    "empresa": "Elite 550",
+    "area": "IT",
+    "colaboradores": "20",
+    "problema": "Fechar com os clientes",
+    "demonstracao": "A aguardar agendamento",
+    "dataRegisto": "2026-06-08T13:00:40.589Z"
+  },
+  {
+    "nome": "Não informado",
+    "empresa": "Kashaka",
+    "area": "Contabilidade",
+    "colaboradores": "5",
+    "problema": "Pendente",
+    "demonstracao": "Pendente",
+    "telefone": "244938531613",
+    "dataRegisto": "2026-06-08T15:15:21.958Z"
+  },
+  {
+    "nome": "Edmilson",
+    "empresa": "Prometeus",
+    "area": "Higiene e limpeza",
+    "colaboradores": "3mil",
+    "problema": "Demora",
+    "demonstracao": "A agendar",
+    "telefone": "244928872248",
+    "dataRegisto": "2026-06-08T20:47:59.693Z"
+  },
+  {
+    "nome": "Elsandro Bento",
+    "empresa": "Empresa 350",
+    "area": "IT",
+    "colaboradores": "A definir",
+    "problema": "Interesse em Agente de Voz para IT",
+    "demonstracao": "Pendente",
+    "telefone": "244947715166",
+    "dataRegisto": "2026-07-17T11:47:38.338Z"
+  }
+]
