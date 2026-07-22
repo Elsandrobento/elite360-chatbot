@@ -231,6 +231,7 @@ const server = http.createServer((req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="refresh" content="10">
       <title>Elite 360 Chatbot - Status</title>
 
       <style>
@@ -265,9 +266,14 @@ server.listen(PORT, () => {
 });
 
 // Inicializar o cliente do WhatsApp
-console.log('🔄 A inicializar o cliente do WhatsApp...');
+const sessionPath = process.env.SESSION_PATH || './';
+console.log(`🔄 A inicializar o cliente do WhatsApp (Caminho da sessão: ${sessionPath})...`);
 const client = new Client({
-  authStrategy: new LocalAuth(),
+  authStrategy: new LocalAuth({ dataPath: sessionPath }),
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018942288-alpha.html',
+  },
   puppeteer: {
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
@@ -277,7 +283,6 @@ const client = new Client({
       '--disable-accelerated-2d-canvas',
       '--no-first-run',
       '--no-zygote',
-      '--single-process',
       '--disable-gpu'
     ]
   }
@@ -299,8 +304,8 @@ client.on('ready', () => {
 
 
 client.on('message', async (msg) => {
-  // Ignorar mensagens de grupos ou mensagens enviadas pelo próprio bot
-  if (msg.from.endsWith('@g.us') || msg.from === 'status@broadcast') return;
+  // Ignorar mensagens de grupos, broadcast ou mensagens enviadas pelo próprio bot/número
+  if (msg.fromMe || msg.from.endsWith('@g.us') || msg.from === 'status@broadcast') return;
 
   // Ignorar mensagens acumuladas antigas (com mais de 2 minutos) para não responder a todas de uma vez quando o bot liga
   const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -394,19 +399,36 @@ client.on('message', async (msg) => {
       console.log(`✂️ Histórico prunado para ${userId}. Mensagens restantes: ${sessionData.history.length}`);
     }
 
-    // Obter modelo e criar sessão de chat dinâmica
-    const model = ai.getGenerativeModel({
-      model: 'gemini-3.1-flash-lite',
-      systemInstruction: SYSTEM_INSTRUCTION
-    });
-
-    const chatSession = model.startChat({
-      history: sessionData.history
-    });
+    // Obter modelo e criar sessão de chat dinâmica (com fallback automático se necessário)
+    let chatSession;
+    try {
+      const model = ai.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
+      chatSession = model.startChat({ history: sessionData.history });
+    } catch (e) {
+      console.warn('⚠️ Falha ao carregar modelo primário, a usar gemini-2.5-flash...');
+      const fallbackModel = ai.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
+      chatSession = fallbackModel.startChat({ history: sessionData.history });
+    }
 
     // Enviar mensagem do utilizador para o Gemini com retentativas automáticas
     const result = await retryWithBackoff(async () => {
-      return await chatSession.sendMessage(userMessage);
+      try {
+        return await chatSession.sendMessage(userMessage);
+      } catch (err) {
+        console.warn(`⚠️ Tentando com modelo alternativo (gemini-2.5-flash)...`);
+        const fallbackModel = ai.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          systemInstruction: SYSTEM_INSTRUCTION
+        });
+        const fbSession = fallbackModel.startChat({ history: sessionData.history });
+        return await fbSession.sendMessage(userMessage);
+      }
     }, 3, 1000);
 
     let botResponse = result.response.text();
