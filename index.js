@@ -20,13 +20,13 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
 // Inicializar API do Gemini
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// Carregar variáveis do chatbot a partir do .env
+// Carregar variáveis do chatbot a partir do .env (compatível com ASCII para a nuvem)
 const VARS = {
   nomeEmpresa: process.env.NOME_EMPRESA || 'Elite 360',
-  servicos: process.env.SERVIÇOS || 'Chatbots inteligentes para WhatsApp Business',
-  horario: process.env.HORÁRIO || 'Segunda a Sexta, horário comercial',
-  contacto: process.env.CONTACTO || 'geral@elite360.pt',
-  localizacao: process.env.LOCALIZAÇÃO || 'Portugal'
+  servicos: process.env.SERVICOS || process.env.SERVIÇOS || 'Chatbots inteligentes para WhatsApp Business',
+  horario: process.env.HORARIO || process.env.HORÁRIO || 'Segunda a Sexta, horário comercial',
+  contacto: process.env.CONTACTO || '+244 930 252 488',
+  localizacao: process.env.LOCALIZACAO || process.env.LOCALIZAÇÃO || 'Luanda, Angola'
 };
 
 // Construir o Prompt Mestre dinâmico com as variáveis substituídas
