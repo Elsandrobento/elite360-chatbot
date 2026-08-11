@@ -510,36 +510,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  const m = process.memoryUsage();
-  res.json({
-    status: 'online',
-    service: 'KixiCredito Kixi IA WhatsApp Bot',
-    whatsapp: whatsappStatus,
-    timestamp: new Date().toISOString()
-  });
-});
+function renderQrPage(req, res) {
+  // Se o cliente solicitar explicitamente JSON via header ou parâmetro
+  if (req.query.format === 'json' || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+    const m = process.memoryUsage();
+    return res.json({
+      status: 'online',
+      service: 'KixiCredito Kixi IA WhatsApp Bot',
+      whatsapp: whatsappStatus,
+      timestamp: new Date().toISOString()
+    });
+  }
 
-app.get('/health', (req, res) => {
-  const m = process.memoryUsage();
-  const isError = whatsappStatus === 'error';
-  res.status(isError ? 500 : 200).json({
-    server: 'online',
-    whatsapp: whatsappStatus,
-    qrCodeAvailable: !!qrCodeUrl,
-    qrCodeUrl: qrCodeUrl || null,
-    lastError: lastError || null,
-    memory: {
-      rss_mb: (m.rss / 1024 / 1024).toFixed(1),
-      heapUsed_mb: (m.heapUsed / 1024 / 1024).toFixed(1),
-      heapTotal_mb: (m.heapTotal / 1024 / 1024).toFixed(1)
-    },
-    activeSessions: sessions.size,
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/qr', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -653,6 +635,28 @@ app.get('/qr', (req, res) => {
   </script>
 </body>
 </html>`);
+}
+
+app.get('/', renderQrPage);
+app.get('/qr', renderQrPage);
+
+app.get('/health', (req, res) => {
+  const m = process.memoryUsage();
+  const isError = whatsappStatus === 'error';
+  res.status(isError ? 500 : 200).json({
+    server: 'online',
+    whatsapp: whatsappStatus,
+    qrCodeAvailable: !!qrCodeUrl,
+    qrCodeUrl: qrCodeUrl || null,
+    lastError: lastError || null,
+    memory: {
+      rss_mb: (m.rss / 1024 / 1024).toFixed(1),
+      heapUsed_mb: (m.heapUsed / 1024 / 1024).toFixed(1),
+      heapTotal_mb: (m.heapTotal / 1024 / 1024).toFixed(1)
+    },
+    activeSessions: sessions.size,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ============================================================
