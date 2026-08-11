@@ -508,7 +508,15 @@ setInterval(async () => {
 // ============================================================
 client.on('message', async (msg) => {
   // Deduplicação: ignorar mensagens já processadas (previne duplicados em reconexão/replay)
-  const msgId = msg.id?._serialized || String(msg.id);
+  let msgId;
+  if (typeof msg.id === 'string') {
+    msgId = msg.id;
+  } else if (msg.id && typeof msg.id === 'object') {
+    msgId = msg.id._serialized || msg.id.id || JSON.stringify(msg.id);
+  } else {
+    msgId = String(Date.now()); // Fallback extremo
+  }
+  
   if (processedMessageIds.has(msgId)) {
     console.log(`[WHATSAPP] Message ignored: Duplicate (${msgId})`);
     return;
