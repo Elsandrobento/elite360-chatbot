@@ -251,13 +251,27 @@ Quando um cliente demonstrar interesse em pedir crédito e recolheres dados sufi
 // ============================================================
 //  CONFIGURAÇÕES DO SISTEMA
 // ============================================================
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
-// REDUZIDO de 20 para 6 (3 turnos user+bot) — mínimo funcional para contexto
-const MAX_HISTORY_MESSAGES = 6;
+const SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutos (reduzido de 30)
+// Máximo de 4 mensagens (2 turnos user+bot) — suficiente para contexto de microcrédito
+const MAX_HISTORY_MESSAGES = 4;
+// Máximo de sessões ativas simultâneas para limitar crescimento da Map
+const MAX_ACTIVE_SESSIONS = 50;
 const MANAGER_NUMBER = process.env.MANAGER_NUMBER || '244930968888@c.us';
 const LEADS_FILE = path.join(process.cwd(), 'kixi_leads.json');
 const SESSION_PATH = process.env.SESSION_PATH || './';
 const sessions = new Map();
+
+// ============================================================
+//  HELPER: Converter histórico Gemini pesado em pares de texto leve
+//  O chatSession.getHistory() devolve objetos grandes com candidates,
+//  safety ratings, metadados, etc. Guardamos apenas role + texto.
+// ============================================================
+function compressHistory(rawHistory) {
+  return rawHistory.map(entry => ({
+    role: entry.role,
+    parts: [{ text: (entry.parts || []).map(p => p.text || '').join('') }]
+  }));
+}
 
 // ============================================================
 //  LIMPEZA PERIÓDICA DE SESSÕES EXPIRADAS
@@ -524,6 +538,19 @@ client.on('message_create', async (msg) => {
     }
     sessionData.lastActive = now;
 
+    // Cap de sessões ativas: se Map tiver demasiadas entradas, remove as mais antigas
+    if (sessions.size > MAX_ACTIVE_SESSIONS) {
+      let oldest = null;
+      let oldestTime = Infinity;
+      for (const [uid, sd] of sessions.entries()) {
+        if (sd.lastActive < oldestTime) { oldestTime = sd.lastActive; oldest = uid; }
+      }
+      if (oldest && oldest !== userId) {
+        sessions.delete(oldest);
+        console.log(`[SESSION_GC] Cap reached (${MAX_ACTIVE_SESSIONS}). Evicted oldest session.`);
+      }
+    }
+
     // Prune do histórico — mantém apenas as últimas MAX_HISTORY_MESSAGES mensagens
     if (sessionData.history.length > MAX_HISTORY_MESSAGES) {
       const extra = sessionData.history.length - MAX_HISTORY_MESSAGES;
@@ -557,7 +584,11 @@ client.on('message_create', async (msg) => {
       }, 2, 1000);
 
       botResponse = result.response.text();
-      sessionData.history = await chatSession.getHistory();
+      // CRÍTICO: Comprimir histórico para texto leve antes de guardar em memória.
+      // chatSession.getHistory() devolve objetos pesados do SDK Gemini com
+      // candidates, safety ratings e metadados — não guardamos esses dados.
+      const rawHistory = await chatSession.getHistory();
+      sessionData.history = compressHistory(rawHistory).slice(-MAX_HISTORY_MESSAGES);
       console.log(`[AI] Gemini response received from ${primaryModelName} (Length: ${botResponse.length} chars)`);
     } catch (primaryErr) {
       console.warn(`⚠️ [AI] Primary model ${primaryModelName} failed: ${primaryErr.message || primaryErr}. Trying fallback ${fallbackModelName}...`);
@@ -573,7 +604,9 @@ client.on('message_create', async (msg) => {
       }, 2, 1000);
 
       botResponse = result.response.text();
-      sessionData.history = await fallbackSession.getHistory();
+      // CRÍTICO: Comprimir histórico para texto leve antes de guardar em memória.
+      const rawFallbackHistory = await fallbackSession.getHistory();
+      sessionData.history = compressHistory(rawFallbackHistory).slice(-MAX_HISTORY_MESSAGES);
       console.log(`[AI] Gemini response received from fallback ${fallbackModelName} (Length: ${botResponse.length} chars)`);
     }
 
@@ -601,6 +634,8 @@ client.on('message_create', async (msg) => {
     console.log(`[WHATSAPP] Response sent successfully to [${userId}]`);
     console.log(`📤 [WHATSAPP] Response snippet: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
     logMemory('After message sent');
+    // Sugestão de GC ao Node.js após cada resposta (reduz heap retido)
+    if (global.gc) { try { global.gc(); } catch (e) {} }
 
   } catch (error) {
     console.error('❌ [AI] Error processing message with Gemini:', error.message || error);
