@@ -380,58 +380,107 @@ client.on('disconnected', (reason) => {
 // ============================================================
 //  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
 // ============================================================
-client.on('message', async (msg) => {
-  if (msg.from.endsWith('@g.us') || msg.from === 'status@broadcast') return;
+// ============================================================
+//  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
+// ============================================================
+client.on('message_create', async (msg) => {
+  // Ignorar mensagens enviadas pelo próprio bot
+  if (msg.fromMe) {
+    return;
+  }
 
-  // Ignorar mensagens antigas (mais de 2 minutos)
+  console.log(`\n📥 [WHATSAPP] Message event received`);
+  console.log(`[WHATSAPP] From: ${msg.from}`);
+  console.log(`[WHATSAPP] Message type: ${msg.type}`);
+  console.log(`[WHATSAPP] Body: "${msg.body || ''}"`);
+
+  const isGroup = msg.from.endsWith('@g.us');
+  const isBroadcast = msg.from === 'status@broadcast';
+  console.log(`[WHATSAPP] Is group: ${isGroup}`);
+  console.log(`[WHATSAPP] Is broadcast: ${isBroadcast}`);
+
+  if (isGroup) {
+    console.log(`[WHATSAPP] Message ignored: Group message (${msg.from})`);
+    return;
+  }
+
+  if (isBroadcast) {
+    console.log(`[WHATSAPP] Message ignored: Status broadcast`);
+    return;
+  }
+
+  // Filtrar mensagens muito antigas (> 5 minutos / 300 segundos para tolerar dessincronia de relógio)
   const nowInSeconds = Math.floor(Date.now() / 1000);
-  if (nowInSeconds - msg.timestamp > 120) {
-    console.log(`⏳ Mensagem antiga ignorada de [${msg.from}]`);
+  const messageAge = nowInSeconds - msg.timestamp;
+  if (messageAge > 300) {
+    console.log(`[WHATSAPP] Message ignored: Old message (${messageAge}s old)`);
     return;
   }
 
-  // Ignorar stickers
+  // Filtrar stickers
   if (msg.hasMedia && msg.type === 'sticker') {
-    console.log(`🚫 Sticker ignorado de [${msg.from}]`);
+    console.log(`[WHATSAPP] Message ignored: Sticker`);
     return;
   }
 
-  const chat = await msg.getChat();
-  const contact = await msg.getContact();
+  // Ignorar mensagens sem corpo nem mídia
+  if (!msg.body && !msg.hasMedia) {
+    console.log(`[WHATSAPP] Message ignored: Empty body`);
+    return;
+  }
+
+  console.log(`[WHATSAPP] Passed message filters`);
+
   const userId = msg.from;
+  let chat = null;
+  try {
+    chat = await msg.getChat();
+  } catch (err) {
+    console.warn(`[WHATSAPP] Warning: Could not get chat object for [${userId}]:`, err.message || err);
+  }
+
+  let contact = null;
+  try {
+    contact = await msg.getContact();
+  } catch (err) {
+    console.warn(`[WHATSAPP] Warning: Could not get contact object for [${userId}]:`, err.message || err);
+  }
 
   // Processar documentos e imagens como comprovativos
   if (msg.hasMedia && (msg.type === 'image' || msg.type === 'document')) {
-    console.log(`📸 Documento/imagem recebido de [${userId}]`);
-    chat.sendStateTyping();
+    console.log(`📸 [WHATSAPP] Document/image received from [${userId}]`);
+    try { await chat?.sendStateTyping(); } catch (e) {}
     try {
       const sessionData = sessions.get(userId);
       const clientName = (sessionData && sessionData.clientName)
         ? sessionData.clientName
-        : (contact.pushname || contact.name || 'Cliente');
+        : (contact?.pushname || contact?.name || 'Cliente');
       const notifyMsg =
         `📄 *DOCUMENTO RECEBIDO - KIXI IA*\n\n` +
         `👤 *Cliente:* ${clientName}\n` +
-        `📱 *Contacto:* wa.me/${contact.id.user}\n\nDocumento em anexo:`;
+        `📱 *Contacto:* wa.me/${contact?.id?.user || userId.split('@')[0]}\n\nDocumento em anexo:`;
+
+      console.log(`[WHATSAPP] Forwarding document to manager...`);
       await client.sendMessage(MANAGER_NUMBER, notifyMsg);
       await msg.forward(MANAGER_NUMBER);
-      await chat.sendMessage(
+      
+      console.log(`[WHATSAPP] Sending confirmation to client...`);
+      await client.sendMessage(userId,
         `Recebemos o seu documento! 📋\n\nA nossa equipa irá analisar e entrará em contacto brevemente.\n\n📞 Apoio imediato: *+244 930 968 888*`
       );
+      console.log(`[WHATSAPP] Document processed successfully`);
     } catch (err) {
-      console.error('❌ Erro ao processar documento:', err);
-      await chat.sendMessage('Recebemos o ficheiro, mas houve um problema ao encaminhá-lo. Contacte-nos pelo *+244 930 968 888*.');
+      console.error('❌ [WHATSAPP] Erro ao processar documento:', err.message || err);
+      await client.sendMessage(userId, 'Recebemos o ficheiro, mas houve um problema ao encaminhá-lo. Contacte-nos pelo *+244 930 968 888*.');
     } finally {
-      chat.clearState();
+      try { await chat?.clearState(); } catch (e) {}
     }
     return;
   }
 
   const userMessage = msg.body;
-  console.log(`\n📥 Mensagem de [${userId}]: "${userMessage}"`);
-  chat.sendStateTyping();
-
-  logMemory('Before AI request');
+  console.log(`[AI] Starting KixiCredito processing`);
+  try { await chat?.sendStateTyping(); } catch (e) {}
 
   try {
     const now = Date.now();
@@ -448,24 +497,47 @@ client.on('message', async (msg) => {
       const extra = sessionData.history.length - MAX_HISTORY_MESSAGES;
       const toRemove = extra % 2 === 0 ? extra : extra + 1;
       sessionData.history = sessionData.history.slice(toRemove);
-      console.log(`✂️ Histórico prunado: ${sessionData.history.length} msgs restantes para [${userId}]`);
+      console.log(`✂️ [AI] History pruned: ${sessionData.history.length} msgs remaining for [${userId}]`);
     }
 
-    const model = ai.getGenerativeModel({
-      model: 'gemini-2.0-flash-lite',
-      systemInstruction: SYSTEM_INSTRUCTION
-    });
+    // Tentar modelos válidos do Gemini (gemini-1.5-flash primeiro, depois gemini-2.0-flash)
+    const primaryModelName = 'gemini-1.5-flash';
+    const fallbackModelName = 'gemini-2.0-flash';
+    
+    console.log(`[AI] Calling Gemini (Model: ${primaryModelName})`);
+    
+    let botResponse = null;
+    try {
+      const model = ai.getGenerativeModel({
+        model: primaryModelName,
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
+      const chatSession = model.startChat({ history: sessionData.history });
 
-    const chatSession = model.startChat({ history: sessionData.history });
+      const result = await retryWithBackoff(async () => {
+        return await chatSession.sendMessage(userMessage);
+      }, 2, 1000);
 
-    const result = await retryWithBackoff(async () => {
-      return await chatSession.sendMessage(userMessage);
-    }, 3, 1000);
+      botResponse = result.response.text();
+      sessionData.history = await chatSession.getHistory();
+      console.log(`[AI] Gemini response received from ${primaryModelName} (Length: ${botResponse.length})`);
+    } catch (primaryErr) {
+      console.warn(`⚠️ [AI] Primary model ${primaryModelName} failed: ${primaryErr.message || primaryErr}. Trying fallback ${fallbackModelName}...`);
+      
+      const fallbackModel = ai.getGenerativeModel({
+        model: fallbackModelName,
+        systemInstruction: SYSTEM_INSTRUCTION
+      });
+      const fallbackSession = fallbackModel.startChat({ history: sessionData.history });
 
-    let botResponse = result.response.text();
-    sessionData.history = await chatSession.getHistory();
+      const result = await retryWithBackoff(async () => {
+        return await fallbackSession.sendMessage(userMessage);
+      }, 2, 1000);
 
-    logMemory('After AI request');
+      botResponse = result.response.text();
+      sessionData.history = await fallbackSession.getHistory();
+      console.log(`[AI] Gemini response received from fallback ${fallbackModelName} (Length: ${botResponse.length})`);
+    }
 
     // Detetar e processar lead
     const leadRegex = /###LEAD_DATA###(.*?)###/;
@@ -473,7 +545,7 @@ client.on('message', async (msg) => {
     if (match) {
       try {
         const leadData = JSON.parse(match[1].trim());
-        leadData.telefone = contact.id.user;
+        leadData.telefone = contact?.id?.user || userId.split('@')[0];
         if (leadData.nome && !sessionData.clientName) {
           sessionData.clientName = leadData.nome;
         }
@@ -484,20 +556,30 @@ client.on('message', async (msg) => {
       botResponse = botResponse.replace(leadRegex, '').trim();
     }
 
-    await chat.sendMessage(botResponse);
-    console.log(`📤 Resposta: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
+    console.log(`[WHATSAPP] Attempting reply to [${userId}]...`);
+    
+    // Usar client.sendMessage para garantir envio mesmo se chat for nulo
+    await client.sendMessage(userId, botResponse);
+    console.log(`[WHATSAPP] Response sent successfully to [${userId}]`);
+    console.log(`📤 [WHATSAPP] Response snippet: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
     logMemory('After message sent');
 
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem:', error);
-    await chat.sendMessage(
-      'De momento não consigo processar o seu pedido. Por favor, contacte-nos:\n\n' +
-      '📞 *+244 930 968 888*\n' +
-      '📧 *atendimento@kixicredito.ao*\n' +
-      '🌐 *www.kixicredito.ao*'
-    );
+    console.error('❌ [AI] Error processing message with Gemini:', error.message || error);
+    try {
+      console.log(`[WHATSAPP] Sending fallback error message to [${userId}]...`);
+      await client.sendMessage(userId,
+        'De momento não consigo processar o seu pedido. Por favor, contacte-nos:\n\n' +
+        '📞 *+244 930 968 888*\n' +
+        '📧 *atendimento@kixicredito.ao*\n' +
+        '🌐 *www.kixicredito.ao*'
+      );
+      console.log(`[WHATSAPP] Fallback error message sent successfully`);
+    } catch (sendErr) {
+      console.error('❌ [WHATSAPP] Failed to send fallback error message:', sendErr.message || sendErr);
+    }
   } finally {
-    chat.clearState();
+    try { await chat?.clearState(); } catch (e) {}
   }
 });
 
