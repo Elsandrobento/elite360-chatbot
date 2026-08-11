@@ -18,7 +18,9 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
 }
 
 // Inicializar API do Gemini
-const ai = new GoogleGenerativeAI(GEMINI_API_KEY)// ============================================================
+const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+
 //  MONITOR FORENSE DE PROCESSOS (Tabela PID | PPID | RSS | TYPE)
 // ============================================================
 function logProcessTreeMemory(label) {
@@ -298,11 +300,11 @@ Quando um cliente demonstrar interesse em pedir crédito e recolheres dados sufi
 // ============================================================
 //  CONFIGURAÇÕES DO SISTEMA
 // ============================================================
-const SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutos (reduzido de 30)
-// Máximo de 4 mensagens (2 turnos user+bot) — suficiente para contexto de microcrédito
-const MAX_HISTORY_MESSAGES = 4;
-// Máximo de sessões ativas simultâneas para limitar crescimento da Map
-const MAX_ACTIVE_SESSIONS = 50;
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+// Mantém últimas 10 mensagens de histórico (5 turnos user+bot)
+const MAX_HISTORY_MESSAGES = 10;
+// Máximo de sessões ativas simultâneas
+const MAX_ACTIVE_SESSIONS = 200;
 const MANAGER_NUMBER = process.env.MANAGER_NUMBER || '244930968888@c.us';
 const LEADS_FILE = path.join(process.cwd(), 'kixi_leads.json');
 const SESSION_PATH = process.env.SESSION_PATH || './';
@@ -386,51 +388,32 @@ function salvarLead(leadData) {
 }
 
 // ============================================================
-//  CONFIGURAÇÃO DO PUPPETEER — OTIMIZADO PARA RENDER FREE (512 MB)
-//
-//  CRÍTICO: --js-flags=--max-old-space-size=256
-//  Limita o heap V8 do processo Chromium a 256 MB.
-//  SEM ESTA FLAG o V8 pode crescer além dos 512 MB do Render → OOM crash.
-//
-//  webVersionCache: { type: 'remote' }
-//  Carrega o WhatsApp Web a partir de uma URL remota fixa.
-//  SEM ESTA CONFIG o whatsapp-web.js guarda a interface Web localmente
-//  em cache → mais RAM consumida.
+//  CONFIGURAÇÃO DO PUPPETEER — HEADLESS LINUX (VPS)
+//  Flags essenciais para correr em servidor Linux sem interface gráfica.
+//  NÃO aplicamos limites de RAM artificiais pois a VPS tem memória suficiente.
 // ============================================================
 const puppeteerArgs = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
-  '--disable-dev-shm-usage',             // CRÍTICO: usa /tmp em vez de /dev/shm do container
+  '--disable-dev-shm-usage',         // Usa /tmp em vez de /dev/shm (compatível com VPS)
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
   '--no-default-browser-check',
   '--no-zygote',
-  '--disable-gpu',                       // CRÍTICO: desativa processo GPU (economiza ~100MB)
-  '--disable-software-rasterizer',       // CRÍTICO: desativa rasterizador software
-  '--disable-site-isolation-trials',     // Reduz processos isolados por site
-  '--renderer-process-limit=1',          // CRÍTICO: limita Chromium a 1 único processo renderer
+  '--disable-gpu',                   // Sem GPU no servidor headless
+  '--disable-software-rasterizer',
   '--mute-audio',
-  '--safebrowsing-disable-auto-update',
   '--disable-extensions',
   '--disable-background-networking',
   '--disable-background-timer-throttling',
   '--disable-renderer-backgrounding',
   '--disable-backgrounding-occluded-windows',
   '--disable-component-update',
-  '--disable-breakpad',
-  '--disable-client-side-phishing-detection',
   '--disable-default-apps',
-  '--disable-hang-monitor',
-  '--disable-ipc-flooding-protection',
-  '--disable-notifications',
-  '--disable-popup-blocking',
-  '--disable-prompt-on-repost',
-  '--disable-speech-api',
   '--disable-sync',
-  '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter,OptimizationHints,Prerender2',
-  '--disk-cache-size=1',
-  '--media-cache-size=1',
-  '--js-flags=--max-old-space-size=150 --max-semi-space-size=2' // Limita o heap V8 dentro do Chromium a 150MB
+  '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter',
+  '--disk-cache-size=33554432',      // Cache 32 MB (razoável para VPS)
+  '--media-cache-size=1'
 ];
 
 const puppeteerConfig = {
@@ -445,9 +428,7 @@ if (process.env.PUPPETEER_EXECUTABLE_PATH) {
 }
 
 // ============================================================
-//  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada em loops/handlers)
-// ============================================================
-//  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada em loops/handlers)
+//  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada)
 // ============================================================
 console.log('[WA] CLIENT CREATED');
 
