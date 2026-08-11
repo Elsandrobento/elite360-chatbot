@@ -669,9 +669,9 @@ client.on('message_create', async (msg) => {
       console.log(`✂️ [AI] History pruned: ${sessionData.history.length} msgs remaining for [${userId}]`);
     }
 
-    // Tentar modelos válidos do Gemini (gemini-1.5-flash primeiro, depois gemini-2.0-flash)
-    const primaryModelName = 'gemini-1.5-flash';
-    const fallbackModelName = 'gemini-2.0-flash';
+    // Modelos Gemini activos (Junho 2025)
+    const primaryModelName = 'gemini-2.5-flash';
+    const fallbackModelName = 'gemini-2.5-flash-lite';
 
     // Log do tamanho do prompt para diagnóstico de memória
     const historyChars = JSON.stringify(sessionData.history).length;
