@@ -6,6 +6,7 @@ import qrcode from 'qrcode-terminal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -17,35 +18,66 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
 }
 
 // Inicializar API do Gemini
-const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
-
+const ai = new GoogleGenerativeAI(GEMINI_API_KEY)// ============================================================
+//  MONITOR FORENSE DE PROCESSOS — mede Node + Chromium Tree no Linux
 // ============================================================
-//  UTILITÁRIO DE MEMÓRIA — diagnóstico em produção
-// ============================================================
-function logMemory(label) {
+function logProcessTreeMemory(label) {
   const m = process.memoryUsage();
+  const nodeRssMb = (m.rss / 1024 / 1024).toFixed(1);
+  const nodeHeapMb = (m.heapUsed / 1024 / 1024).toFixed(1);
+
+  if (process.platform === 'linux') {
+    try {
+      const output = execSync('ps -eo pid,ppid,rss,cmd --sort=-rss', { encoding: 'utf8' });
+      const lines = output.trim().split('\n').slice(1);
+      let chromiumRssTotalKb = 0;
+      let chromiumCount = 0;
+      let maxChromiumProcessKb = 0;
+
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 4) continue;
+        const rssKb = parseInt(parts[2], 10) || 0;
+        const cmd = parts.slice(3).join(' ');
+
+        if (cmd.includes('chrome') || cmd.includes('chromium')) {
+          chromiumRssTotalKb += rssKb;
+          chromiumCount++;
+          if (rssKb > maxChromiumProcessKb) maxChromiumProcessKb = rssKb;
+        }
+      }
+
+      const chromTotalMb = (chromiumRssTotalKb / 1024).toFixed(1);
+      const chromMaxMb = (maxChromiumProcessKb / 1024).toFixed(1);
+      const treeTotalMb = (parseFloat(nodeRssMb) + parseFloat(chromTotalMb)).toFixed(1);
+
+      console.log(
+        `[PROCESS_MEMORY] ${label} | TOTAL TREE RSS=${treeTotalMb}MB` +
+        ` | NODE RSS=${nodeRssMb}MB (HEAP=${nodeHeapMb}MB)` +
+        ` | CHROMIUM RSS=${chromTotalMb}MB (${chromiumCount} procs, Max: ${chromMaxMb}MB)`
+      );
+      return;
+    } catch (e) {
+      // Se ps falhar, cai para o formato padrao
+    }
+  }
+
   console.log(
-    `[MEMORY] ${label} | RSS=${(m.rss / 1024 / 1024).toFixed(1)}MB` +
-    ` HEAP=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB/${(m.heapTotal / 1024 / 1024).toFixed(1)}MB` +
-    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB` +
-    ` ARRAYBUF=${(m.arrayBuffers / 1024 / 1024).toFixed(1)}MB`
+    `[PROCESS_MEMORY] ${label} | NODE RSS=${nodeRssMb}MB | HEAP=${nodeHeapMb}MB` +
+    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB`
   );
 }
 
+function logMemory(label) {
+  logProcessTreeMemory(label);
+}
+
 // ============================================================
-//  MONITOR PERIÓDICO DE MEMÓRIA (a cada 30 segundos)
-//  Permite ver crescimento de RAM nos logs do Render sem enviar mensagens
+//  MONITOR PERIÓDICO DE ÁRVORE DE PROCESSOS (a cada 15 segundos)
 // ============================================================
 setInterval(() => {
-  const m = process.memoryUsage();
-  const sessions_count = sessions ? sessions.size : 0;
-  console.log(
-    `[MEMORY_MONITOR] RSS=${(m.rss / 1024 / 1024).toFixed(1)}MB` +
-    ` HEAP=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB/${(m.heapTotal / 1024 / 1024).toFixed(1)}MB` +
-    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB` +
-    ` SESSIONS=${sessions_count}`
-  );
-}, 30000).unref(); // .unref() para não bloquear shutdown do processo
+  logProcessTreeMemory('PERIODIC_MONITOR');
+}, 15000).unref();
 
 // ============================================================
 //  ESTADO DA APLICAÇÃO
@@ -353,15 +385,25 @@ function salvarLead(leadData) {
 const puppeteerArgs = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
-  '--disable-dev-shm-usage',
+  '--disable-dev-shm-usage',             // CRÍTICO: usa /tmp em vez de /dev/shm limitado do container
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
   '--no-zygote',
   '--disable-gpu',
-  '--disable-site-isolation-trials',  // Reduz processos isolados por site
-  '--mute-audio',                      // Remove engine de áudio (economiza RAM)
-  '--safebrowsing-disable-auto-update', // Remove serviço de background
-  '--js-flags=--max-old-space-size=256' // CRÍTICO: limita heap V8 a 256 MB
+  '--disable-site-isolation-trials',     // Reduz processos isolados por site
+  '--renderer-process-limit=1',          // CRÍTICO: limita Chromium a 1 único processo renderer
+  '--mute-audio',
+  '--safebrowsing-disable-auto-update',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-component-update',
+  '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter,OptimizationHints,Prerender2',
+  '--disk-cache-size=1',
+  '--media-cache-size=1',
+  '--js-flags=--max-old-space-size=180 --max-semi-space-size=2' // Limita o heap V8 dentro do Chromium a 180MB
 ];
 
 const puppeteerConfig = {
@@ -401,14 +443,14 @@ client.on('qr', (qr) => {
   console.log('\n[WA] QR GENERATED');
   qrcode.generate(qr, { small: true });
   console.log(`[WA] QR Link: ${qrCodeUrl}\n`);
-  logMemory('[MEMORY] QR GENERATED');
+  logProcessTreeMemory('QR GENERATED');
 });
 
 client.on('authenticated', async () => {
   whatsappStatus = 'authenticated';
   qrCodeUrl = null;
   console.log('\n[WA] QR SCANNED & AUTHENTICATED');
-  logMemory('[MEMORY] AUTHENTICATED');
+  logProcessTreeMemory('AUTHENTICATED');
   try {
     const state = await client.getState();
     console.log(`[WA] STATE AFTER AUTHENTICATION: ${state}`);
@@ -420,7 +462,7 @@ client.on('authenticated', async () => {
 client.on('loading_screen', (percent, message) => {
   whatsappStatus = 'loading';
   console.log(`[WA] LOADING: ${percent}% - ${message}`);
-  logMemory(`[MEMORY] LOADING ${percent}%`);
+  logProcessTreeMemory(`LOADING_${percent}%`);
 });
 
 client.on('change_state', (state) => {
@@ -431,7 +473,7 @@ client.on('auth_failure', (msg) => {
   whatsappStatus = 'auth_failure';
   lastError = `Auth failure: ${msg}`;
   console.error('❌ [WA] AUTH FAILURE:', msg);
-  logMemory('[MEMORY] AUTH_FAILURE');
+  logProcessTreeMemory('AUTH_FAILURE');
 });
 
 client.on('ready', async () => {
@@ -439,7 +481,21 @@ client.on('ready', async () => {
   qrCodeUrl = null;
   console.log('\n🚀 [WA] READY! KixiCrédito Kixi IA online.');
   console.log('💚 KixiCrédito S.A. | +244 930 968 888 | atendimento@kixicredito.ao');
-  logMemory('[MEMORY] READY');
+  logProcessTreeMemory('READY');
+
+  // Diagnóstico de erro de página Puppeteer
+  try {
+    if (client.pupBrowser) {
+      client.pupBrowser.on('disconnected', () => {
+        console.error('❌ [PUPPETEER] BROWSER DISCONNECTED — O processo Chromium foi desconectado ou encerrado.');
+        logProcessTreeMemory('BROWSER_DISCONNECTED');
+      });
+    }
+    if (client.pupPage) {
+      client.pupPage.on('error', (err) => console.error('❌ [PUPPETEER PAGE ERROR]:', err.message || err));
+      client.pupPage.on('pageerror', (err) => console.error('❌ [PUPPETEER PAGE UNCAUGHT EXCEPTION]:', err.message || err));
+    }
+  } catch (diagErr) {}
 
   try {
     const state = await client.getState();
