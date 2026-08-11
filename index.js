@@ -378,12 +378,19 @@ if (process.env.PUPPETEER_EXECUTABLE_PATH) {
 // ============================================================
 //  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada em loops/handlers)
 // ============================================================
+//  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada em loops/handlers)
+// ============================================================
+console.log('[WA] CLIENT CREATED');
+
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'kixi-ia', dataPath: SESSION_PATH }),
-  // webVersionCache: carrega WhatsApp Web remotamente → menos RAM que cache local
+  takeoverOnConflict: true,
+  takeoverTimeoutMs: 0,
+  // webVersionCache: usa versão estável 2.2412.54 para evitar o bug de sincronização
+  // de histórico suspensa que ocorria com a versão alpha
   webVersionCache: {
     type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018942288-alpha.html',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
   },
   puppeteer: puppeteerConfig
 });
@@ -391,40 +398,79 @@ const client = new Client({
 client.on('qr', (qr) => {
   whatsappStatus = 'qr_ready';
   qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-  console.log('\n📱 [WHATSAPP] Authentication required — QR code gerado');
+  console.log('\n[WA] QR GENERATED');
   qrcode.generate(qr, { small: true });
-  console.log(`\n🔗 Link QR Code:\n${qrCodeUrl}\n`);
-  logMemory('After QR generated');
+  console.log(`[WA] QR Link: ${qrCodeUrl}\n`);
+  logMemory('[MEMORY] QR GENERATED');
 });
 
-client.on('authenticated', () => {
+client.on('authenticated', async () => {
   whatsappStatus = 'authenticated';
-  console.log('[WHATSAPP] Client authenticated successfully');
-  logMemory('After authenticated');
+  qrCodeUrl = null;
+  console.log('\n[WA] QR SCANNED & AUTHENTICATED');
+  logMemory('[MEMORY] AUTHENTICATED');
+  try {
+    const state = await client.getState();
+    console.log(`[WA] STATE AFTER AUTHENTICATION: ${state}`);
+  } catch (err) {
+    console.warn(`[WA] Could not fetch state after auth: ${err.message || err}`);
+  }
+});
+
+client.on('loading_screen', (percent, message) => {
+  whatsappStatus = 'loading';
+  console.log(`[WA] LOADING: ${percent}% - ${message}`);
+  logMemory(`[MEMORY] LOADING ${percent}%`);
+});
+
+client.on('change_state', (state) => {
+  console.log(`[WA] STATE CHANGED: ${state}`);
 });
 
 client.on('auth_failure', (msg) => {
   whatsappStatus = 'auth_failure';
   lastError = `Auth failure: ${msg}`;
-  console.error('❌ [WHATSAPP] Authentication failure:', msg);
+  console.error('❌ [WA] AUTH FAILURE:', msg);
+  logMemory('[MEMORY] AUTH_FAILURE');
 });
 
-client.on('ready', () => {
+client.on('ready', async () => {
   whatsappStatus = 'ready';
   qrCodeUrl = null;
-  console.log('\n🚀 [WHATSAPP] Client ready! KixiCrédito Kixi IA online.');
+  console.log('\n🚀 [WA] READY! KixiCrédito Kixi IA online.');
   console.log('💚 KixiCrédito S.A. | +244 930 968 888 | atendimento@kixicredito.ao');
-  logMemory('After WhatsApp ready');
+  logMemory('[MEMORY] READY');
+
+  try {
+    const state = await client.getState();
+    const info = client.info;
+    const maskedUser = info?.wid?.user ? (info.wid.user.substring(0, 4) + '***' + info.wid.user.slice(-2)) : 'N/A';
+    console.log(`[WA] OPERATIONAL STATE: ${state}`);
+    console.log(`[WA] CLIENT INFO: Pushname="${info?.pushname || 'N/A'}", WID=${maskedUser}, Platform=${info?.platform || 'N/A'}`);
+  } catch (err) {
+    console.warn(`[WA] Could not fetch operational state info: ${err.message || err}`);
+  }
 });
 
 client.on('disconnected', (reason) => {
   whatsappStatus = 'disconnected';
   lastError = `Disconnected: ${reason}`;
-  // Regista mas NÃO reinicia automaticamente — evitar loops de reconexão
-  // que criam múltiplos processos Chromium e causam OOM
-  console.error('❌ [WHATSAPP] Disconnected:', reason);
-  console.warn('⚠️ [WHATSAPP] Serviço HTTP mantém-se ativo. Reiniciar o serviço no Render para reconectar.');
+  console.error('❌ [WA] DISCONNECTED:', reason);
+  logMemory('[MEMORY] DISCONNECTED');
+  console.warn('⚠️ [WA] Serviço HTTP mantém-se ativo. Reiniciar o serviço no Render para reconectar.');
 });
+
+// MONITOR DE ESTADO DO WHATSAPP (a cada 20 segundos)
+setInterval(async () => {
+  if (whatsappStatus === 'authenticated' || whatsappStatus === 'ready' || whatsappStatus === 'loading') {
+    try {
+      const state = await client.getState();
+      console.log(`[WA] PERIODIC CHECK | Status: ${whatsappStatus} | State: ${state} | Pushname: ${client.info?.pushname || 'N/A'}`);
+    } catch (e) {
+      console.log(`[WA] PERIODIC CHECK | Status: ${whatsappStatus} | Error getting state: ${e.message}`);
+    }
+  }
+}, 20000).unref();
 
 // ============================================================
 //  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
@@ -723,12 +769,16 @@ function renderQrPage(req, res) {
     <div class="brand">💚 KixiCrédito S.A.</div>
     <div class="subtitle">Assistente Virtual Kixi IA — Ligação WhatsApp</div>
     
-    <div id="loading-section" style="display: ${qrCodeUrl ? 'none' : 'block'};">
+    <div id="loading-section" style="display: ${qrCodeUrl ? 'none' : (whatsappStatus === 'ready' ? 'none' : 'block')};">
       <div class="spinner"></div>
-      <p style="color:#8696a0; font-size:0.9rem;" id="loading-msg">A inicializar o cliente do WhatsApp... Por favor, aguarde.</p>
+      <p style="color:#8696a0; font-size:0.9rem;" id="loading-msg">
+        ${whatsappStatus === 'authenticated' || whatsappStatus === 'loading'
+          ? '⏳ Autenticado! A concluir sincronização e a aguardar sinal READY...'
+          : 'A inicializar o cliente do WhatsApp... Por favor, aguarde.'}
+      </p>
     </div>
 
-    <div id="qr-section" style="display: ${qrCodeUrl && (whatsappStatus === 'qr_ready' || whatsappStatus === 'initializing') ? 'block' : 'none'};">
+    <div id="qr-section" style="display: ${qrCodeUrl && whatsappStatus === 'qr_ready' ? 'block' : 'none'};">
       <p style="color:#d1d7db; font-size:0.9rem; margin-bottom:0.5rem;">
         1. Abra o WhatsApp no telemóvel<br>
         2. Toque em <b>Mais opções</b> ou <b>Definições</b><br>
@@ -742,10 +792,10 @@ function renderQrPage(req, res) {
       <div class="status-badge" id="status-text">A aguardar leitura do QR Code...</div>
     </div>
 
-    <div id="success-section" style="display: ${whatsappStatus === 'ready' || whatsappStatus === 'authenticated' ? 'block' : 'none'};" class="success-box">
+    <div id="success-section" style="display: ${whatsappStatus === 'ready' ? 'block' : 'none'};" class="success-box">
       <div class="success-icon">🚀</div>
       <h3 style="margin:0 0 0.5rem 0; color:#00a884; font-size:1.3rem;">Kixi IA Conetada com Sucesso!</h3>
-      <p style="margin:0; font-size:0.92rem; color:#d1d7db;">O WhatsApp da KixiCrédito S.A. está online e pronto para atender os clientes.</p>
+      <p style="margin:0; font-size:0.92rem; color:#d1d7db;">O WhatsApp da KixiCrédito S.A. está online, READY e pronto para atender os clientes.</p>
     </div>
   </div>
 
@@ -761,12 +811,18 @@ function renderQrPage(req, res) {
         const qrSec = document.getElementById('qr-section');
         const successSec = document.getElementById('success-section');
         const qrImg = document.getElementById('qr-img');
+        const loadingMsg = document.getElementById('loading-msg');
 
-        if (data.whatsapp === 'ready' || data.whatsapp === 'authenticated') {
+        if (data.whatsapp === 'ready') {
           loadingSec.style.display = 'none';
           qrSec.style.display = 'none';
           successSec.style.display = 'block';
-        } else if (data.qrCodeAvailable && data.qrCodeUrl) {
+        } else if (data.whatsapp === 'authenticated' || data.whatsapp === 'loading') {
+          qrSec.style.display = 'none';
+          successSec.style.display = 'none';
+          loadingSec.style.display = 'block';
+          loadingMsg.innerText = '⏳ Autenticado! A concluir sincronização e a aguardar sinal READY (Status: ' + data.whatsapp + ')...';
+        } else if (data.qrCodeAvailable && data.qrCodeUrl && data.whatsapp === 'qr_ready') {
           loadingSec.style.display = 'none';
           successSec.style.display = 'none';
           qrSec.style.display = 'block';
@@ -779,7 +835,7 @@ function renderQrPage(req, res) {
           successSec.style.display = 'none';
           qrSec.style.display = 'none';
           loadingSec.style.display = 'block';
-          document.getElementById('loading-msg').innerText = 'Status: ' + data.whatsapp + '... Aguarde por favor.';
+          loadingMsg.innerText = 'Status: ' + data.whatsapp + '... Aguarde por favor.';
         }
       } catch (e) {
         console.error('Erro ao verificar status:', e);
