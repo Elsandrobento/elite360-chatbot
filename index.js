@@ -19,7 +19,7 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
 
 // Inicializar API do Gemini
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY)// ============================================================
-//  MONITOR FORENSE DE PROCESSOS — mede Node + Chromium Tree no Linux
+//  MONITOR FORENSE DE PROCESSOS (Tabela PID | PPID | RSS | TYPE)
 // ============================================================
 function logProcessTreeMemory(label) {
   const m = process.memoryUsage();
@@ -33,29 +33,44 @@ function logProcessTreeMemory(label) {
       let chromiumRssTotalKb = 0;
       let chromiumCount = 0;
       let maxChromiumProcessKb = 0;
+      const processDetails = [];
 
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
         if (parts.length < 4) continue;
+        const pid = parts[0];
+        const ppid = parts[1];
         const rssKb = parseInt(parts[2], 10) || 0;
         const cmd = parts.slice(3).join(' ');
 
-        if (cmd.includes('chrome') || cmd.includes('chromium')) {
-          chromiumRssTotalKb += rssKb;
+        if (cmd.includes('node')) {
+          processDetails.push(`  PID: ${pid.padEnd(6)} | PPID: ${ppid.padEnd(6)} | RSS: ${(rssKb / 1024).toFixed(1).padStart(6)} MB | Node.js (main)`);
+        } else if (cmd.includes('chrome') || cmd.includes('chromium')) {
+          const rssMb = rssKb / 1024;
+          chromiumRssTotalKb += rssMb;
           chromiumCount++;
-          if (rssKb > maxChromiumProcessKb) maxChromiumProcessKb = rssKb;
+          if (rssMb > maxChromiumProcessKb) maxChromiumProcessKb = rssMb;
+
+          let type = 'Chromium Helper';
+          if (cmd.includes('--type=renderer')) type = 'Chromium Renderer';
+          else if (cmd.includes('--type=gpu-process')) type = 'Chromium GPU';
+          else if (cmd.includes('--type=utility')) type = 'Chromium Utility';
+          else if (cmd.includes('--type=zygote')) type = 'Chromium Zygote';
+          else type = 'Chromium Browser (Main)';
+
+          processDetails.push(`  PID: ${pid.padEnd(6)} | PPID: ${ppid.padEnd(6)} | RSS: ${rssMb.toFixed(1).padStart(6)} MB | ${type}`);
         }
       }
 
       const chromTotalMb = (chromiumRssTotalKb / 1024).toFixed(1);
-      const chromMaxMb = (maxChromiumProcessKb / 1024).toFixed(1);
       const treeTotalMb = (parseFloat(nodeRssMb) + parseFloat(chromTotalMb)).toFixed(1);
 
-      console.log(
-        `[PROCESS_MEMORY] ${label} | TOTAL TREE RSS=${treeTotalMb}MB` +
-        ` | NODE RSS=${nodeRssMb}MB (HEAP=${nodeHeapMb}MB)` +
-        ` | CHROMIUM RSS=${chromTotalMb}MB (${chromiumCount} procs, Max: ${chromMaxMb}MB)`
-      );
+      console.log(`\n==================================================`);
+      console.log(`[PROCESS_TREE_DETAIL] ${label} | TOTAL TREE RSS: ${treeTotalMb} MB (Limit: 512 MB)`);
+      console.log(`Node RSS: ${nodeRssMb} MB (Heap: ${nodeHeapMb} MB) | Chromium RSS: ${chromTotalMb} MB (${chromiumCount} procs)`);
+      console.log(`--------------------------------------------------`);
+      processDetails.slice(0, 12).forEach(d => console.log(d));
+      console.log(`==================================================\n`);
       return;
     } catch (e) {
       // Se ps falhar, cai para o formato padrao
@@ -385,11 +400,13 @@ function salvarLead(leadData) {
 const puppeteerArgs = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
-  '--disable-dev-shm-usage',             // CRÍTICO: usa /tmp em vez de /dev/shm limitado do container
+  '--disable-dev-shm-usage',             // CRÍTICO: usa /tmp em vez de /dev/shm do container
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
+  '--no-default-browser-check',
   '--no-zygote',
-  '--disable-gpu',
+  '--disable-gpu',                       // CRÍTICO: desativa processo GPU (economiza ~100MB)
+  '--disable-software-rasterizer',       // CRÍTICO: desativa rasterizador software
   '--disable-site-isolation-trials',     // Reduz processos isolados por site
   '--renderer-process-limit=1',          // CRÍTICO: limita Chromium a 1 único processo renderer
   '--mute-audio',
@@ -400,10 +417,20 @@ const puppeteerArgs = [
   '--disable-renderer-backgrounding',
   '--disable-backgrounding-occluded-windows',
   '--disable-component-update',
+  '--disable-breakpad',
+  '--disable-client-side-phishing-detection',
+  '--disable-default-apps',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-notifications',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-speech-api',
+  '--disable-sync',
   '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter,OptimizationHints,Prerender2',
   '--disk-cache-size=1',
   '--media-cache-size=1',
-  '--js-flags=--max-old-space-size=180 --max-semi-space-size=2' // Limita o heap V8 dentro do Chromium a 180MB
+  '--js-flags=--max-old-space-size=150 --max-semi-space-size=2' // Limita o heap V8 dentro do Chromium a 150MB
 ];
 
 const puppeteerConfig = {
@@ -940,19 +967,29 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // ============================================================
 //  INICIALIZAÇÃO ASSÍNCRONA DO CLIENTE WHATSAPP
+//  Protegida por flag contra dupla inicialização acidental
 // ============================================================
+let isInitializing = false;
+
 async function initWhatsAppClient() {
+  if (isInitializing) {
+    console.warn('⚠️ [WA] Initialization skipped: WhatsApp client is already initializing!');
+    return;
+  }
+  isInitializing = true;
+
   console.log('[WHATSAPP] Starting client initialization...');
   console.log('[PUPPETEER] Starting browser...');
-  logMemory('Before WhatsApp initialization');
+  logProcessTreeMemory('BEFORE_CLIENT_INIT');
   try {
     await client.initialize();
-    logMemory('After WhatsApp initialization');
+    logProcessTreeMemory('AFTER_CLIENT_INIT');
   } catch (error) {
+    isInitializing = false;
     whatsappStatus = 'error';
     lastError = error.message || String(error);
     console.error('❌ [WHATSAPP] Erro na inicialização:', error);
-    logMemory('On initialization error');
+    logProcessTreeMemory('INIT_ERROR');
   }
 }
 
