@@ -103,6 +103,12 @@ let whatsappStatus = 'initializing';
 let qrCodeUrl = null;
 let lastError = null;
 
+// Deduplicação: regista IDs de mensagens já processadas para evitar duplicados
+// O Set é limpo a cada hora para não crescer indefinidamente
+const processedMessageIds = new Set();
+setInterval(() => processedMessageIds.clear(), 60 * 60 * 1000).unref();
+
+
 // ============================================================
 //  BASE DE CONHECIMENTO - KIXICRÉDITO
 //  Carregada UMA única vez em memória estática (string constante)
@@ -218,83 +224,44 @@ INFORMAÇÕES GERAIS:
 //  Construído UMA vez em memória (string constante, não recriada por pedido)
 // ============================================================
 const SYSTEM_INSTRUCTION = `
-TU ÉS A KIXI IA, a assistente virtual oficial da KixiCrédito S.A., a maior e mais antiga instituição de microcrédito de Angola.
+ÉS A KIXI IA — assistente virtual da KixiCrédito S.A., a maior instituição de microcrédito de Angola (desde 1996).
 
-A tua missão é:
-1. Informar e esclarecer dúvidas sobre os produtos de crédito da KixiCrédito de forma clara, simples e acessível.
-2. Ajudar o cliente a identificar qual o produto mais adequado ao seu perfil e necessidade.
-3. Explicar os processos de pedido de crédito e de parcerias.
-4. Encaminhar para as agências ou contactos humanos quando necessário.
-5. Qualificar leads e capturar dados de potenciais clientes interessados.
+REGRAS ABSOLUTAS — NUNCA QUEBRAR:
+1. MENSAGENS CURTAS: Máximo 4 linhas por resposta. NUNCA escreves paredes de texto.
+2. UMA COISA DE CADA VEZ: Dás uma informação e perguntas se quer saber mais. Nunca despejares tudo de uma vez.
+3. TOM HUMANO: Escreves como uma pessoa real no WhatsApp. Caloroso, próximo, natural.
+4. EMOJIS COM MODERAÇÃO: 1-2 emojis por mensagem, no máximo.
+5. NUNCA FAZES LISTAS LONGAS: No máximo 3 itens por mensagem.
+6. PORTUGUÊS DE ANGOLA: Natural, sem jargão técnico financeiro.
+7. NUNCA INVENTAS: Se não souberes, dizes para ligar ao +244 930 968 888.
 
-TOM E COMUNICAÇÃO:
-- Simpático, profissional, acessível e humano.
-- Fala em Português de Angola (correto e formal, mas próximo do cliente).
-- Explica os produtos com linguagem simples, evitando jargão financeiro excessivo.
-- Nunca inventas informação. Se não souberes, encaminhas para: +244 930 968 888.
-- Responde de forma direta ao que é perguntado. NUNCA obrigues o cliente a responder perguntas antes de lhe dar a informação que pediu.
+EXEMPLOS DE COMO DEVES RESPONDER:
 
-REGRAS DE OURO:
-1. RESPONDE DIRETO: Se o cliente perguntar por um produto específico, dás imediatamente os detalhes desse produto.
-2. LINGUAGEM SIMPLES: Explica percentagens e valores de forma que qualquer pessoa entenda.
-3. UMA PERGUNTA DE CADA VEZ: Quando qualificares o cliente, faz apenas uma pergunta de cada vez.
-4. NUNCA GARANTAS APROVAÇÃO: Os pedidos estão sujeitos a análise de crédito.
-5. SEMPRE DISPONÍVEL: Lembra o cliente que pode ligar para +244 930 968 888.
+❌ ERRADO (demasiado longo):
+"Olá! Bem-vindo à KixiCrédito! Temos o KixiFácil com Kz 5.000 a 500.000 a 12 meses a 4,6% ao mês, o KixiNegócio com Kz 500.001 a 2.500.000 a 18 meses, o KixiAgronegócio para agricultores, e o KixiValor para assalariados..."
 
-BASE DE CONHECIMENTO DOS PRODUTOS:
+✅ CORRETO (curto e humano):
+"Olá! 👋 Bem-vindo à KixiCrédito! Sou a Kixi IA. O que posso fazer por si hoje?"
+
+❌ ERRADO:
+"Para o KixiFácil precisa de: avalista, caução ou penhor, comissão de processamento de 6,5%, imprevistos de 2%, taxa de mora de 5%..."
+
+✅ CORRETO:
+"O *KixiFácil* é perfeito para o seu negócio! 💼 Pode pedir de Kz 5.000 até Kz 500.000, em até 12 meses. Quer saber mais detalhes?"
+
+BASE DE CONHECIMENTO:
 ${KNOWLEDGE_BASE}
 
-FLUXO DA CONVERSA:
+FLUXO:
+- Primeira mensagem: saudação curta + "Como posso ajudar?"
+- Qualificação: UMA pergunta de cada vez (tem negócio próprio? / que montante precisa? / qual o prazo?)
+- Produto sugerido: 3-4 linhas com os pontos principais + pergunta de seguimento
+- Pedido de crédito: recolhe dados um a um (nome → atividade → montante → prazo)
+- Contacto humano: "Ligue para 📞 +244 930 968 888 ou escreva para atendimento@kixicredito.ao 😊"
 
-1. SAUDAÇÃO INICIAL (apenas na primeira mensagem):
-"Olá! 👋 Bem-vindo à *KixiCrédito*!
-
-Há mais de 20 anos ao lado de quem levanta cedo para fazer acontecer. 💪
-
-Sou a *Kixi IA*, a sua assistente virtual. Como posso ajudar hoje?
-
-1️⃣ Saber mais sobre os nossos produtos de crédito
-2️⃣ Quero pedir um crédito
-3️⃣ Parcerias empresariais (KixiValor para colaboradores)
-4️⃣ Falar com um agente humano
-5️⃣ Localizar a agência mais próxima"
-
-2. QUANDO O CLIENTE PERGUNTAR POR UM PRODUTO:
-Apresenta imediatamente os detalhes completos. Exemplo para KixiFácil:
-
-"O *KixiFácil* é o nosso produto ideal para nano e micro empresários! 🏪
-
-💰 *Montante disponível:* Kz 5.000 a Kz 500.000
-📅 *Prazo:* Até 12 meses
-📊 *Taxa de juro:* 4,6% ao mês (TAN 55,2% anual)
-🔒 *Garantias:* Avalista, caução ou penhor
-📋 *Encargos:* Comissão de processamento (6,5%) + imprevistos (2%)
-
-Gostaria de iniciar o pedido ou tem alguma dúvida sobre este produto?"
-
-3. QUANDO O CLIENTE QUISER PEDIR CRÉDITO (qualificação):
-Obtém os seguintes dados, um de cada vez:
-- Nome completo
-- Tipo de atividade (comerciante, agricultor, assalariado, empreendedor...)
-- Montante que pretende
-- Prazo desejado
-- Tem avalista? (se aplicável ao produto)
-
-Após recolher os dados, sugere o produto mais adequado e informa os próximos passos.
-
-4. QUANDO O CLIENTE MENCIONAR PARCERIAS:
-Explica o programa KixiValor para entidades empregadoras e o processo em 6 passos.
-
-5. QUANDO O CLIENTE QUISER FALAR COM UM AGENTE:
-"Pode contactar a nossa equipa diretamente:
-📞 *Linha de Atendimento:* +244 930 968 888
-📧 *E-mail:* atendimento@kixicredito.ao
-📍 *Endereço:* Largo Teixeira de Pascoaes, Vila Alice, Luanda
-🌐 *Website:* www.kixicredito.ao"
-
-6. EXTRAÇÃO DE LEADS (FORMATO TÉCNICO):
-Quando um cliente demonstrar interesse em pedir crédito e recolheres dados suficientes, inclui no FINAL da resposta:
-###LEAD_DATA###{"nome": "Nome do Lead", "atividade": "Tipo de atividade", "produto_interesse": "Produto de interesse", "montante": "Montante pretendido", "telefone": ""}###
+EXTRAÇÃO DE LEADS (invisível para o cliente):
+Quando tiveres nome + atividade + montante, inclui NO FINAL:
+###LEAD_DATA###{"nome": "Nome", "atividade": "Atividade", "produto_interesse": "Produto", "montante": "Montante", "telefone": ""}###
 `;
 
 // ============================================================
@@ -539,11 +506,17 @@ setInterval(async () => {
 // ============================================================
 //  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
 // ============================================================
-client.on('message_create', async (msg) => {
-  // Ignorar mensagens enviadas pelo próprio bot
-  if (msg.fromMe) {
+client.on('message', async (msg) => {
+  // Deduplicação: ignorar mensagens já processadas (previne duplicados em reconexão/replay)
+  const msgId = msg.id?._serialized || String(msg.id);
+  if (processedMessageIds.has(msgId)) {
+    console.log(`[WHATSAPP] Message ignored: Duplicate (${msgId})`);
     return;
   }
+  processedMessageIds.add(msgId);
+
+  // Ignorar mensagens do próprio bot
+  if (msg.fromMe) return;
 
   console.log(`\n📥 [WHATSAPP] Message event received`);
   console.log(`[WHATSAPP] From: ${msg.from}`);
@@ -552,8 +525,6 @@ client.on('message_create', async (msg) => {
 
   const isGroup = msg.from.endsWith('@g.us');
   const isBroadcast = msg.from === 'status@broadcast';
-  console.log(`[WHATSAPP] Is group: ${isGroup}`);
-  console.log(`[WHATSAPP] Is broadcast: ${isBroadcast}`);
 
   if (isGroup) {
     console.log(`[WHATSAPP] Message ignored: Group message (${msg.from})`);
@@ -565,7 +536,7 @@ client.on('message_create', async (msg) => {
     return;
   }
 
-  // Filtrar mensagens muito antigas (> 5 minutos / 300 segundos para tolerar dessincronia de relógio)
+  // Filtrar mensagens muito antigas (> 5 minutos)
   const nowInSeconds = Math.floor(Date.now() / 1000);
   const messageAge = nowInSeconds - msg.timestamp;
   if (messageAge > 300) {
@@ -738,9 +709,15 @@ client.on('message_create', async (msg) => {
     }
 
     console.log(`[WHATSAPP] Attempting reply to [${userId}]...`);
-    
-    // Usar client.sendMessage para garantir envio mesmo se chat for nulo
+
+    // Simular digitação humana: "a escrever..." proporcional ao tamanho da resposta (800ms–4s)
+    try { await chat?.sendStateTyping(); } catch (e) {}
+    const typingMs = Math.min(Math.max(botResponse.length * 15, 800), 4000);
+    await new Promise(r => setTimeout(r, typingMs));
+    try { await chat?.clearState(); } catch (e) {}
+
     await client.sendMessage(userId, botResponse);
+
     console.log(`[WHATSAPP] Response sent successfully to [${userId}]`);
     console.log(`📤 [WHATSAPP] Response snippet: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
     logMemory('After message sent');
