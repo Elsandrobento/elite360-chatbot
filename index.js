@@ -5,8 +5,6 @@ import qrcode from 'qrcode-terminal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
-import http from 'http';
-
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -20,479 +18,411 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
 // Inicializar API do Gemini
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// Carregar variáveis do chatbot a partir do .env (compatível com ASCII para a nuvem)
-const VARS = {
-  nomeEmpresa: process.env.NOME_EMPRESA || 'Elite 360',
-  servicos: process.env.SERVICOS || process.env.SERVIÇOS || 'Chatbots inteligentes para WhatsApp Business',
-  horario: process.env.HORARIO || process.env.HORÁRIO || 'Segunda a Sexta, horário comercial',
-  contacto: process.env.CONTACTO || '+244 930 252 488',
-  localizacao: process.env.LOCALIZACAO || process.env.LOCALIZAÇÃO || 'Luanda, Angola'
-};
+// ============================================================
+//  BASE DE CONHECIMENTO - KIXICRÉDITO (extraída dos PDFs)
+// ============================================================
+const KNOWLEDGE_BASE = `
+INSTITUIÇÃO: KixiCrédito S.A.
+Endereço: Largo Teixeira de Pascoaes, Vila Alice, Luanda, Angola
+Linha de Atendimento: +244 930 968 888
+E-mail: atendimento@kixicredito.ao
+Website: www.kixicredito.ao
+Redes Sociais: Facebook, LinkedIn e Instagram (@kixicredito_oficial)
 
-// Construir o Prompt Mestre dinâmico com as variáveis substituídas
+QUEM SOMOS:
+A KixiCrédito é uma instituição financeira não bancária dedicada à promoção da inclusão financeira e ao desenvolvimento do empreendedorismo em Angola. Fundada em 1996 com um projeto de microcrédito pela Development Workshop Angola (DWA). Em 2008 tornou-se a primeira sociedade de microcrédito licenciada pelo Banco Nacional de Angola (BNA). Com mais de 20 anos de experiência, apoia milhares de empreendedores, famílias e pequenos negócios com soluções financeiras responsáveis. Presente em diversas províncias de Angola.
+Slogan: "Há mais de 20 anos a KixiCrédito anda com quem levanta cedo e faz acontecer."
+
+---
+
+PRODUTO 1: KixiFácil
+Tipo: Crédito Empresarial - Nano e Micro Empresarial
+Público-alvo: Nano e micro empresários
+Montante Mínimo: Kz 5.000,00 (Cinco mil Kwanzas)
+Montante Máximo: Kz 500.000,00 (Quinhentos mil Kwanzas)
+Prazo máximo: 12 meses
+Periodicidade de pagamento: Mensal
+Regime de prestações: Constantes
+Taxa de Juro Nominal Anual (TAN): 55,2%
+Taxa mensal: 4,6% a.m.
+Garantias exigidas: Solidária, avalista e penhor
+Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
+Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
+Taxa de juro de mora: 5% sobre o valor da prestação em mora
+Falta de pagamento: Não renovação automática para reempréstimo
+Condições de utilização: Depósito em conta bancária do cliente
+Validade da FTI: 90 dias
+
+---
+
+PRODUTO 2: KixiNegócio
+Tipo: Crédito Empresarial - Empreendedorismo
+Público-alvo: Empreendedores e pequenos negócios
+Montante Mínimo: Kz 500.001,00 (Quinhentos e um mil Kwanzas)
+Montante Máximo: Kz 2.500.000,00 (Dois Milhões e quinhentos mil Kwanzas)
+Prazo máximo: 18 meses
+Periodicidade de pagamento: Mensal
+Regime de prestações: Constantes
+Taxa de Juro Nominal Anual (TAN): 55,2%
+Taxa mensal: 4,6% a.m.
+Garantias exigidas: Avalista, hipoteca, penhor e caução
+Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
+Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
+Taxa de juro de mora: 5% sobre o valor da prestação em mora
+Falta de pagamento: Sem elegibilidade para novo empréstimo
+Condições de utilização: Depósito em conta bancária do cliente
+Validade da FTI: 90 dias
+
+---
+
+PRODUTO 3: KixiAgronegócio
+Tipo: Crédito para Agricultura e Pecuária
+Público-alvo: Nano, micro e pequenos agricultores
+Montante Mínimo: Kz 50.000,00 (Cinquenta mil Kwanzas)
+Montante Máximo: Kz 2.500.000,00 (Dois Milhões e quinhentos mil Kwanzas)
+Prazo máximo: 18 meses
+Periodicidade de pagamento: Mensal ou Quadrimestral
+Regime de prestações: Constantes
+Taxa de Juro Nominal Anual (TAN): 55,2%
+Taxa mensal: 4,6% a.m.
+Garantias exigidas: Avalista, hipoteca, penhor e caução
+Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
+Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
+Taxa de juro de mora: 5% sobre o valor da prestação em mora
+Falta de pagamento: Sem elegibilidade para novo empréstimo
+Condições de utilização: Depósito em conta bancária do cliente
+Periodicidade especial: Opção de pagamento quadrimestral para ciclos agrícolas
+Validade da FTI: 90 dias
+
+---
+
+PRODUTO 4: KixiValor
+Tipo: Adiantamento de Salário - Crédito a Médio Longo Prazo
+Público-alvo: Trabalhadores assalariados (colaboradores de empresas parceiras)
+Montante Mínimo: Kz 75.000,00 (Setenta e cinco mil Kwanzas)
+Montante Máximo: Kz 2.500.000,00 (Dois Milhões e quinhentos mil Kwanzas)
+Prazo máximo: 18 meses
+Periodicidade de pagamento: Mensal
+Regime de prestações: Constantes (Capital + Juros)
+Taxa de Juro Nominal Anual (TAN): 61,2%
+Garantias: Não aplicável (garantia implícita pelo vínculo laboral)
+Reembolso antecipado: 3% do valor em dívida
+Taxa de juro de mora: 50% sobre a prestação mensal convencionada
+Multa diária por incumprimento: 1% sobre o valor vencido
+Consequências de incumprimento: Comunicação à Central de Informação e Risco de Crédito do BNA
+Condições de utilização: Depósito em conta bancária do cliente
+Validade da FTI: 90 dias
+
+---
+
+PARCERIAS KIXICRÉDITO:
+Destinatários: Entidades empregadoras que queiram oferecer crédito aos seus colaboradores
+Requisitos para parceria:
+- Protocolo celebrado com a entidade empregadora
+- Documento de identificação válido dos colaboradores
+- Extracto bancário
+
+Processo de Adesão:
+1º Passo: Celebração do protocolo de parceria entre a entidade empregadora e a KixiCrédito
+2º Passo: O colaborador apresenta o pedido de crédito junto da KixiCrédito
+3º Passo: Entrega da documentação necessária para análise do pedido
+4º Passo: Análise e decisão sobre o pedido de crédito
+5º Passo: Assinatura do contrato
+6º Passo: Desembolso do montante aprovado
+
+Para se tornar parceiro: +244 930 968 888 ou atendimento@kixicredito.ao
+
+---
+
+INFORMAÇÕES GERAIS:
+- Direito de revogação: A qualquer momento, sem custos, antes da concessão do financiamento
+- Rejeição do pedido: O cliente é informado de imediato após a rejeição
+- Cópia do contrato: Entregue após celebração (gratuita)
+- Todos os produtos válidos por 90 dias a partir da data da FTI
+`;
+
+// ============================================================
+//  PROMPT MESTRE DA KIXI IA
+// ============================================================
 const SYSTEM_INSTRUCTION = `
-TU ÉS O ASSISTENTE VIRTUAL COMERCIAL DA ${VARS.nomeEmpresa.toUpperCase()}.
-A tua especialidade é apresentar e vender as nossas soluções líderes de Automação de Processos e Inteligência Artificial, qualificando leads interessados.
+TU ÉS A KIXI IA, a assistente virtual oficial da KixiCrédito S.A., a maior e mais antiga instituição de microcrédito de Angola.
 
-O teu objetivo principal é:
-1. Apresentar os benefícios das nossas soluções inteligentes (Chatbots, Agente de Chat Interno, Agente de Voz e Agente de IA de Qualidade) para o negócio do cliente.
-2. Tirar dúvidas sobre preços, pacotes, métricas e funcionamento de forma imediata, transparente e consultiva.
-3. Qualificar o lead obtendo: Nome, Nome da Empresa, Área de atuação, Número de colaboradores e Principal problema no atendimento ou processo atual.
-4. Conduzir o cliente para o agendamento de uma demonstração gratuita ou para a compra de um pacote.
+A tua missão é:
+1. Informar e esclarecer dúvidas sobre os produtos de crédito da KixiCrédito de forma clara, simples e acessível.
+2. Ajudar o cliente a identificar qual o produto mais adequado ao seu perfil e necessidade.
+3. Explicar os processos de pedido de crédito e de parcerias.
+4. Encaminhar para as agências ou contactos humanos quando necessário.
+5. Qualificar leads e capturar dados de potenciais clientes interessados.
 
-INFORMAÇÕES DA EMPRESA (ELITE 360):
-- Nome da Empresa: ${VARS.nomeEmpresa}
-- Quem somos: Somos líderes de mercado em Angola, com mais de 6 anos de experiência em Inteligência Artificial. Combinamos tecnologia de ponta (LLMs, GPT, NLP, pesquisa vetorial avançada) e plataformas low-code para criar soluções escaláveis.
-- Escritório Físico / Localização: Talatona, Luanda, Edifício Prometeus, Angola.
-- Contacto do Escritório / Geral: +244 928 872 248 / geral@elitee360.com (ou o configurado: ${VARS.contacto})
-- Horário de funcionamento: ${VARS.horario}
+TOM E COMUNICAÇÃO:
+- Simpático, profissional, acessível e humano.
+- Fala em Português de Angola (correto e formal, mas próximo do cliente).
+- Explica os produtos com linguagem simples, evitando jargão financeiro excessivo.
+- Nunca inventas informação. Se não souberes, encaminhas para: +244 930 968 888.
+- Responde de forma direta ao que é perguntado. NUNCA obrigues o cliente a responder perguntas antes de lhe dar a informação que pediu.
 
-MÉTRICAS DE SUCESSO GERAIS DA ELITE 360:
-- Retorno sobre o Investimento (ROI) médio de ~800%.
-- Taxa de automatização de até 80% nos processos.
-- Incremento de 67% na captação de leads.
-- Nível de satisfação do cliente de 4.5/5.
+REGRAS DE OURO:
+1. RESPONDE DIRETO: Se o cliente perguntar por um produto específico, dás imediatamente os detalhes desse produto.
+2. LINGUAGEM SIMPLES: Explica percentagens e valores de forma que qualquer pessoa entenda.
+3. UMA PERGUNTA DE CADA VEZ: Quando qualificares o cliente, faz apenas uma pergunta de cada vez.
+4. NUNCA GARANTAS APROVAÇÃO: Os pedidos estão sujeitos a análise de crédito.
+5. SEMPRE DISPONÍVEL: Lembra o cliente que pode ligar para +244 930 968 888.
 
-AS NOSSAS SOLUÇÕES CORPORATIVAS / SERVIÇOS DO PDF:
-1. AGENTE DE CHAT INTERNO COM IA:
-   - Um assistente virtual disponível 24/7 que conhece todas as políticas, processos e ferramentas da empresa, respondendo em segundos.
-   - Reduz até 40% no volume de pedidos a Recursos Humanos (RH), IT e suporte interno, libertando as equipas.
-   - Acelera o onboarding de novos colaboradores em até 60%.
-   - Alcança uma taxa de 80% de resolução na primeira interação (FCR), sem necessidade de abrir tickets ou esperar dias.
-2. AGENTE DE VOZ INTERNO COM IA:
-   - Permite falar de forma natural em várias línguas, com respostas por voz em tempo real 24/7.
-   - Ideal para turnos, operações globais ou colaboradores em campo.
-   - Reduz o tempo de resposta sem comprometer a qualidade do suporte interno (RH, IT, formação, compliance).
-3. AGENTE DE IA DE QUALIDADE INTERNO:
-   - Configura automações para monitorizar conformidade, qualidade e segurança em todas as interações operacionais.
-   - Aumenta a cobertura de auditorias de 3% para 100% em todas as comunicações operacionais, work permits e reports HSE (Segurança, Saúde e Ambiente) verificados, sem falhas nem amostragem.
-   - Reduz significativamente custos de auditoria interna e compliance, eliminando revisões manuais.
-   - Identifica desvios de procedimento, near-misses (quase-acidentes) recorrentes e oportunidades de otimização antes de virarem incidentes.
-4. PLATAFORMA DE AUTOMATIZAÇÃO DE PROCESSOS INTERNOS E ANÁLISE DE DADOS:
-   - Integrações robustas para fluxo contínuo de informação e análise inteligente de dados corporativos.
-
-CASOS DE SUCESSO DA ELITE 360:
-- GENERALI TRANQUILIDADE (desde 2019):
-  - Implementação de Chat Virtual Assistants no Contact Center da Generali Portugal para gerir grandes volumes de contacto.
-  - Resultados: 80% de automatização nas interações do Contact Center e 20% de redução no volume de chamadas telefónicas.
-- BANCO BAI (Banco Angolano de Investimentos) (desde 2020):
-  - Desenvolvimento do assistente "LUENA" (Locutor Único de Envio de Notificações Automáticas).
-  - Funcionalidades: Resposta a FAQ, informações de produtos/serviços bancários, apoio em abertura de conta, registo no BAI Direto, transferência para agentes humanos (Live Chat).
-  - Resultados: 85% dos clientes atendidos automaticamente, atendimento 24/7 em 3 canais integrados.
-
-TOM DE COMUNICAÇÃO:
-- Profissional, simpático, simples e muito dinâmico.
-- Consultivo e útil (foca-se no que o cliente precisa saber).
-- Focado em vendas, mas com diálogo natural e flexível (nunca forces perguntas de qualificação se o cliente pediu uma informação específica).
-- Responde em Português de Portugal (e com termos angolanos apropriados se for o caso de Angola).
-
-REGRAS DE OURO E PRIORIDADE DE ATENDIMENTO:
-1. RESPONDE DIRETO AO QUE É PERGUNTADO: Se o cliente perguntar por preços, pacotes, métricas ou um serviço específico do PDF (ex: Agente de IA de Qualidade), deves fornecer IMEDIATAMENTE os detalhes desse serviço. NUNCA exijas que o cliente responda a perguntas de qualificação antes de lhe dares a informação que ele pediu.
-2. FAZ PERGUNTAS DE FORMA GRADUAL: Só faz perguntas de qualificação se o fluxo da conversa permitir de forma natural. Faz sempre UMA pergunta de cada vez.
-3. PAGAMENTOS E COMPROVATIVOS: Se o cliente decidir adquirir um dos pacotes de WhatsApp ou serviços, explica que o pagamento é feito por MCX Express para o número 947715166 e que ele deve enviar o comprovativo nesta conversa.
-
-PACOTES DE VENDA WHATSAPP E PREÇOS:
-* Pacote Bronze (Básico): Fluxo de atendimento simples para FAQs e triagem inicial de clientes. Preço: 25.000 Kz/mês.
-* Pacote Prata (Intermédio - Mais Popular): Chatbot qualificador avançado com inteligência artificial para interagir e qualificar leads. Preço: 50.000 Kz/mês.
-* Pacote Ouro (Avançado/Premium): Solução completa com IA integrada, agendamentos em tempo real, integração CRM e suporte prioritário. Preço: 95.000 Kz/mês.
-Nota: Para soluções corporativas customizadas (como Agentes Internos de Chat/Voz/Qualidade do PDF), qualifica o cliente e propõe o agendamento de uma demonstração gratuita ou contacto direto com o consultor.
+BASE DE CONHECIMENTO DOS PRODUTOS:
+${KNOWLEDGE_BASE}
 
 FLUXO DA CONVERSA:
 
-1. SAUDAÇÃO INICIAL (Apenas na primeira mensagem):
-Deves saudar o cliente exatamente com este formato:
-"Olá 👋 Seja bem-vindo à ${VARS.nomeEmpresa}.
+1. SAUDAÇÃO INICIAL (apenas na primeira mensagem):
+"Olá! 👋 Bem-vindo à *KixiCrédito*!
 
-Nós ajudamos empresas a otimizar processos e a automatizar o atendimento com Inteligência Artificial de ponta.
+Há mais de 20 anos ao lado de quem levanta cedo para fazer acontecer. 💪
 
-Como posso ajudar hoje?
+Sou a *Kixi IA*, a sua assistente virtual. Como posso ajudar hoje?
 
-1️⃣ Saber mais sobre Soluções de IA (Agentes de Chat, Voz e Qualidade)
-2️⃣ Ver pacotes de Chatbots de WhatsApp e Preços
-3️⃣ Casos de Sucesso e Métricas da Elite 360
-4️⃣ Quero automatizar a minha empresa / Agendar Demonstração
-5️⃣ Falar com um Consultor / Contactos"
+1️⃣ Saber mais sobre os nossos produtos de crédito
+2️⃣ Quero pedir um crédito
+3️⃣ Parcerias empresariais (KixiValor para colaboradores)
+4️⃣ Falar com um agente humano
+5️⃣ Localizar a agência mais próxima"
 
-2. SE O CLIENTE SELECIONAR OU PERGUNTAR POR UM PACOTE ESPECÍFICO (Ex: Pacote Ouro):
-Apresenta detalhadamente o pacote pedido. Exemplo para o Pacote Ouro:
-"O nosso *Pacote Ouro (Premium)* é a nossa solução mais completa e robusta! 🌟
-Inclui:
-- Chatbot com Inteligência Artificial Avançada.
-- Agendamento de reuniões/consultas em tempo real.
-- Integração completa com CRM e sistemas da sua empresa.
-- Suporte prioritário.
-Valor: *95.000 Kz/mês*.
+2. QUANDO O CLIENTE PERGUNTAR POR UM PRODUTO:
+Apresenta imediatamente os detalhes completos. Exemplo para KixiFácil:
 
-Gostaria de agendar uma demonstração gratuita do Pacote Ouro ou prefere avançar já para a ativação?"
+"O *KixiFácil* é o nosso produto ideal para nano e micro empresários! 🏪
 
-3. SE O CLIENTE QUISER AVANÇAR PARA COMPRA:
-"Excelente escolha! Para avançar com a ativação do pacote, o pagamento deve ser efetuado por *MCX Express* para o número: *947715166*.
-Após realizar a transferência, por favor envie o comprovativo (print ou documento) diretamente nesta conversa para darmos início à configuração."
+💰 *Montante disponível:* Kz 5.000 a Kz 500.000
+📅 *Prazo:* Até 12 meses
+📊 *Taxa de juro:* 4,6% ao mês (TAN 55,2% anual)
+🔒 *Garantias:* Avalista, caução ou penhor
+📋 *Encargos:* Comissão de processamento (6,5%) + imprevistos (2%)
 
-4. SE O CLIENTE QUISER UMA DEMONSTRAÇÃO OU AUTOMATIZAR A EMPRESA (Qualificação):
-Tenta obter os seguintes dados, um de cada vez:
-- Nome
-- Nome da Empresa
-- Área de atuação
-- Número de colaboradores
-- Principal problema que pretendem resolver ou serviço em que têm interesse (ex: Chatbot, Agente de Voz, Auditoria de Qualidade, etc.)
-Exemplo: "Excelente! Para agendarmos a demonstração ideal para o seu negócio, qual é o seu nome e o nome da sua empresa?"
+Gostaria de iniciar o pedido ou tem alguma dúvida sobre este produto?"
 
-5. EXTRAÇÃO DE LEADS (MUITO IMPORTANTE - FORMATO TÉCNICO):
-Sempre que conseguires recolher as informações necessárias e agendares (ou estiveres quase a agendar) a demonstração, deves incluir no FINAL da tua resposta uma linha especial contendo a tag de dados. Esta tag serve para que o sistema salve o lead automaticamente. O formato deve ser exatamente este (tudo numa linha):
-###LEAD_DATA###{"nome": "Nome do Lead", "empresa": "Nome da Empresa", "area": "Área de atuação", "colaboradores": "Nº de Colab", "problema": "Problema relatado", "demonstracao": "Data/Hora sugerida se houver"}###`;
+3. QUANDO O CLIENTE QUISER PEDIR CRÉDITO (qualificação):
+Obtém os seguintes dados, um de cada vez:
+- Nome completo
+- Tipo de atividade (comerciante, agricultor, assalariado, empreendedor...)
+- Montante que pretende
+- Prazo desejado
+- Tem avalista? (se aplicável ao produto)
 
-// Configuração da duração máxima da sessão inativa (30 minutos)
+Após recolher os dados, sugere o produto mais adequado e informa os próximos passos.
+
+4. QUANDO O CLIENTE MENCIONAR PARCERIAS:
+Explica o programa KixiValor para entidades empregadoras e o processo em 6 passos.
+
+5. QUANDO O CLIENTE QUISER FALAR COM UM AGENTE:
+"Pode contactar a nossa equipa diretamente:
+📞 *Linha de Atendimento:* +244 930 968 888
+📧 *E-mail:* atendimento@kixicredito.ao
+📍 *Endereço:* Largo Teixeira de Pascoaes, Vila Alice, Luanda
+🌐 *Website:* www.kixicredito.ao"
+
+6. EXTRAÇÃO DE LEADS (FORMATO TÉCNICO):
+Quando um cliente demonstrar interesse em pedir crédito e recolheres dados suficientes, inclui no FINAL da resposta:
+###LEAD_DATA###{"nome": "Nome do Lead", "atividade": "Tipo de atividade", "produto_interesse": "Produto de interesse", "montante": "Montante pretendido", "telefone": ""}###
+`;
+
+// ============================================================
+//  CONFIGURAÇÕES DO SISTEMA
+// ============================================================
 const SESSION_TIMEOUT = 30 * 60 * 1000;
-// Limite máximo de mensagens no histórico para evitar sobrecarga e timeouts
 const MAX_HISTORY_MESSAGES = 20;
-
-// Contacto do gerente/comercial para encaminhamento de leads e comprovativos (+244 947715166)
-const MANAGER_NUMBER = '244947715166@c.us';
-
-// Memória de sessões de chat em memória
+const MANAGER_NUMBER = process.env.MANAGER_NUMBER || '244930968888@c.us';
+const LEADS_FILE = path.join(process.cwd(), 'kixi_leads.json');
 const sessions = new Map();
 
-// Caminho do ficheiro leads.json
-const LEADS_FILE = path.join(process.cwd(), 'leads.json');
-
-// Função auxiliar para tentar novamente em caso de falha temporária com a API do Gemini
+// ============================================================
+//  FUNÇÕES AUXILIARES
+// ============================================================
 async function retryWithBackoff(fn, retries = 3, delay = 1000) {
   try {
     return await fn();
   } catch (error) {
-    if (retries <= 0) {
-      throw error;
-    }
-    console.warn(`⚠️ Erro na API do Gemini. Tentativas restantes: ${retries}. Tentando novamente em ${delay}ms... Erro: ${error.message || error}`);
+    if (retries <= 0) throw error;
+    console.warn(`⚠️ Erro na API. Tentativas restantes: ${retries}. A tentar em ${delay}ms... Erro: ${error.message || error}`);
     await new Promise(resolve => setTimeout(resolve, delay));
     return retryWithBackoff(fn, retries - 1, delay * 2);
   }
 }
 
-// Função para salvar lead no JSON e notificar o gerente
 function salvarLead(leadData) {
   try {
     let leads = [];
     if (fs.existsSync(LEADS_FILE)) {
       const content = fs.readFileSync(LEADS_FILE, 'utf-8');
-      if (content.trim()) {
-        leads = JSON.parse(content);
-      }
+      if (content.trim()) leads = JSON.parse(content);
     }
-
-    // Evitar duplicados recentes
     const jaExiste = leads.some(l =>
-      l.empresa.toLowerCase() === leadData.empresa.toLowerCase() &&
-      l.nome.toLowerCase() === leadData.nome.toLowerCase()
+      l.telefone === leadData.telefone &&
+      l.nome?.toLowerCase() === leadData.nome?.toLowerCase()
     );
-
     if (!jaExiste) {
       leadData.dataRegisto = new Date().toISOString();
       leads.push(leadData);
       fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
-      console.log(`\n🚨 [LEAD CAPTURADO] Lead da empresa "${leadData.empresa}" guardado com sucesso no ficheiro leads.json!`);
-
-      // Enviar notificação com os dados completos para o gerente (+244 947715166)
-      const managerMsg = `🚨 *NOVO LEAD QUALIFICADO CAPTURADO!* 🚨\n\n` +
-        `👤 *Nome:* ${leadData.nome}\n` +
-        `🏢 *Empresa:* ${leadData.empresa}\n` +
-        `💼 *Área de Atuação:* ${leadData.area || 'Não informada'}\n` +
-        `👥 *Colaboradores:* ${leadData.colaboradores || 'Não informados'}\n` +
-        `❌ *Problema Principal:* ${leadData.problema || 'Não informado'}\n` +
-        `📅 *Sugestão de Demo:* ${leadData.demonstracao || 'Não agendada'}\n` +
+      console.log(`\n🚨 [LEAD CAPTURADO] "${leadData.nome}" guardado em kixi_leads.json!`);
+      const managerMsg =
+        `🚨 *NOVO LEAD KIXI IA* 🚨\n\n` +
+        `👤 *Nome:* ${leadData.nome || 'N/D'}\n` +
+        `💼 *Atividade:* ${leadData.atividade || 'N/D'}\n` +
+        `💰 *Produto Interesse:* ${leadData.produto_interesse || 'N/D'}\n` +
+        `📊 *Montante Pretendido:* ${leadData.montante || 'N/D'}\n` +
         `📱 *Contacto:* wa.me/${leadData.telefone || ''}`;
-
       client.sendMessage(MANAGER_NUMBER, managerMsg)
-        .then(() => console.log(`✉️ Notificação de lead enviada para o gerente.`))
-        .catch(err => console.error(`❌ Erro ao notificar o gerente:`, err));
+        .then(() => console.log(`✉️ Notificação enviada ao gestor.`))
+        .catch(err => console.error(`❌ Erro ao notificar gestor:`, err));
     }
   } catch (error) {
-    console.error('❌ Erro ao salvar o lead no ficheiro:', error);
+    console.error('❌ Erro ao salvar lead:', error);
   }
 }
 
-// Estado e Servidor Web HTTP para a nuvem
-let latestQrUrl = null;
-let botStatus = '⏳ A inicializar...';
-
-const PORT = process.env.PORT || 3000;
-const server = http.createServer((req, res) => {
-  if (req.url === '/ping' || req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('OK');
-    return;
-  }
-
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(`
-    <!DOCTYPE html>
-    <html lang="pt">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="refresh" content="10">
-      <title>Elite 360 Chatbot - Status</title>
-
-      <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 40px 20px; }
-        .card { background: #1e293b; max-width: 480px; margin: 0 auto; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        h1 { color: #38bdf8; font-size: 24px; margin-bottom: 8px; }
-        .status { font-weight: bold; padding: 8px 16px; border-radius: 20px; display: inline-block; margin: 15px 0; }
-        .online { background: #059669; color: #fff; }
-        .waiting { background: #d97706; color: #fff; }
-        img { margin-top: 15px; border-radius: 12px; border: 4px solid #38bdf8; }
-        p { color: #94a3b8; font-size: 14px; }
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <h1>🤖 Elite 360 Chatbot</h1>
-        <p>Serviço Comercial WhatsApp</p>
-        <div class="status ${botStatus.includes('ONLINE') ? 'online' : 'waiting'}">${botStatus}</div>
-        ${latestQrUrl && !botStatus.includes('ONLINE') ? `
-          <p>Digitalize o código QR com o seu WhatsApp:</p>
-          <img src="${latestQrUrl}" width="260" height="260" alt="QR Code WhatsApp" />
-        ` : ''}
-        ${botStatus.includes('ONLINE') ? '<p>✅ O chatbot está ativo e a responder a mensagens 24h!</p>' : ''}
-      </div>
-    </body>
-    </html>
-  `);
-});
-
-server.listen(PORT, () => {
-  console.log(`🌐 Servidor Web de Status a rodar na porta ${PORT}`);
-});
-
-// Inicializar o cliente do WhatsApp
-const sessionPath = process.env.SESSION_PATH || './';
-console.log(`🔄 A inicializar o cliente do WhatsApp (Caminho da sessão: ${sessionPath})...`);
+// ============================================================
+//  CLIENTE WHATSAPP
+// ============================================================
+console.log('🔄 A inicializar a Kixi IA...');
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: sessionPath }),
-  webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018942288-alpha.html',
-  },
-  puppeteer: {
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu',
-      '--disable-site-isolation-trials',
-      '--disable-extensions',
-      '--disable-component-extensions-with-background-pages',
-      '--disable-default-apps',
-      '--disable-background-networking',
-      '--disable-sync',
-      '--disable-translate',
-      '--metrics-recording-only',
-      '--mute-audio',
-      '--safebrowsing-disable-auto-update',
-      '--js-flags=--max-old-space-size=256'
-    ]
-  }
+  authStrategy: new LocalAuth({ clientId: 'kixi-ia' }),
+  puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
 client.on('qr', (qr) => {
-  botStatus = '📱 A aguardar leitura do QR Code...';
-  latestQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-  console.log('\n📱 [LEITURA DE QR CODE] Digitalize o código QR abaixo com o seu WhatsApp:');
+  console.log('\n📱 [QR CODE] Digitalize com o WhatsApp:');
   qrcode.generate(qr, { small: true });
-  console.log(`\n🔗 Link alternativo no navegador: ${latestQrUrl}\n`);
+  console.log(`\n🔗 Link alternativo:\nhttps://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}\n`);
 });
 
 client.on('ready', () => {
-  botStatus = '🚀 ONLINE';
-  latestQrUrl = null;
-  console.log('\n🚀 [CHATBOT ONLINE] Elite 360 Chatbot ligado com sucesso e pronto para responder!');
+  console.log('\n🚀 [KIXI IA ONLINE] Assistente virtual da KixiCrédito pronta!');
+  console.log('💚 KixiCrédito S.A. | +244 930 968 888 | atendimento@kixicredito.ao');
 });
 
-
+// ============================================================
+//  PROCESSAMENTO DE MENSAGENS
+// ============================================================
 client.on('message', async (msg) => {
-  // Ignorar mensagens de grupos, broadcast ou mensagens enviadas pelo próprio bot/número
-  if (msg.fromMe || msg.from.endsWith('@g.us') || msg.from === 'status@broadcast') return;
+  if (msg.from.endsWith('@g.us') || msg.from === 'status@broadcast') return;
 
-  // Ignorar mensagens acumuladas antigas (com mais de 2 minutos) para não responder a todas de uma vez quando o bot liga
+  // Ignorar mensagens antigas (mais de 2 minutos)
   const nowInSeconds = Math.floor(Date.now() / 1000);
   if (nowInSeconds - msg.timestamp > 120) {
-    console.log(`⏳ Mensagem antiga ignorada de [${msg.from}]: (mais de 2 minutos atrás)`);
+    console.log(`⏳ Mensagem antiga ignorada de [${msg.from}]`);
     return;
   }
 
-  let chat = null;
-  try {
-    chat = await msg.getChat();
-  } catch (err) {
-    console.warn(`⚠️ Não foi possível obter o chat para ${msg.from}:`, err.message || err);
-  }
-
-  let contact = null;
-  try {
-    contact = await msg.getContact();
-  } catch (err) {
-    console.warn(`⚠️ Não foi possível obter o contacto para ${msg.from}:`, err.message || err);
-  }
-
-  const userId = msg.from;
-  const userMessage = msg.body;
-
-  // Se a mensagem for um sticker, nós ignoramos para não processar como comprovativo
+  // Ignorar stickers
   if (msg.hasMedia && msg.type === 'sticker') {
-    console.log(`🚫 Sticker ignorado de [${userId}]. Não será tratado como comprovativo.`);
+    console.log(`🚫 Sticker ignorado de [${msg.from}]`);
     return;
   }
 
-  // Se a mensagem contiver média (apenas imagens ou documentos serão aceites como comprovativo)
+  const chat = await msg.getChat();
+  const contact = await msg.getContact();
+  const userId = msg.from;
+
+  // Processar documentos e imagens como comprovativos
   if (msg.hasMedia && (msg.type === 'image' || msg.type === 'document')) {
-    console.log(`📸 Mídia recebida de [${userId}] (Tipo: ${msg.type}). A tratar como comprovativo...`);
-    try { await chat?.sendStateTyping(); } catch (e) {}
+    console.log(`📸 Documento/imagem recebido de [${userId}]`);
+    chat.sendStateTyping();
     try {
-      // Tentar obter dados da conversa ativa para dar contexto ao gerente
       const sessionData = sessions.get(userId);
       const clientName = (sessionData && sessionData.clientName)
         ? sessionData.clientName
-        : (contact?.pushname || contact?.name || 'Cliente');
-      
-      const notifyMsg = `📄 *NOVO COMPROVATIVO DE PAGAMENTO RECEBIDO!* 📄\n\n` +
+        : (contact.pushname || contact.name || 'Cliente');
+      const notifyMsg =
+        `📄 *DOCUMENTO RECEBIDO - KIXI IA*\n\n` +
         `👤 *Cliente:* ${clientName}\n` +
-        `📱 *Contacto:* wa.me/${contact?.id?.user || userId.split('@')[0]}\n\n` +
-        `O comprovativo enviado segue em anexo abaixo:`;
-
+        `📱 *Contacto:* wa.me/${contact.id.user}\n\nDocumento em anexo:`;
       await client.sendMessage(MANAGER_NUMBER, notifyMsg);
-      // Encaminhar o arquivo de comprovativo recebido para o gerente
       await msg.forward(MANAGER_NUMBER);
-      console.log(`➡️ Comprovativo encaminhado com sucesso para o gerente.`);
-
-      // Confirmar a receção com o cliente
-      await client.sendMessage(userId, `Muito obrigado pelo envio do comprovativo! 📈\n\nA nossa equipa administrativa já recebeu o recibo e vai iniciar a configuração do seu chatbot. Entraremos em contacto consigo muito em breve para os próximos passos.`);
+      await chat.sendMessage(
+        `Recebemos o seu documento! 📋\n\nA nossa equipa irá analisar e entrará em contacto brevemente.\n\n📞 Apoio imediato: *+244 930 968 888*`
+      );
     } catch (err) {
-      console.error('❌ Erro ao processar ou encaminhar comprovativo de média:', err);
-      await client.sendMessage(userId, 'Recebemos o seu arquivo, mas ocorreu um pequeno problema ao encaminhá-lo para a nossa equipa administrativa. Por favor, envie novamente ou contacte diretamente o suporte comercial no número +244 947715166.');
+      console.error('❌ Erro ao processar documento:', err);
+      await chat.sendMessage('Recebemos o ficheiro, mas houve um problema ao encaminhá-lo. Contacte-nos pelo *+244 930 968 888*.');
     } finally {
-      try { await chat?.clearState(); } catch (e) {}
+      chat.clearState();
     }
-    return; // Não processar comprovativos como texto no Gemini
+    return;
   }
 
-  console.log(`\n📥 Mensagem recebida de [${userId}]: "${userMessage}"`);
-
-  // Mostrar indicador de "escrevendo..."
-  try { await chat?.sendStateTyping(); } catch (e) {}
+  const userMessage = msg.body;
+  console.log(`\n📥 Mensagem de [${userId}]: "${userMessage}"`);
+  chat.sendStateTyping();
 
   try {
     const now = Date.now();
     let sessionData = sessions.get(userId);
 
-    // Se a sessão não existir ou tiver expirado por inatividade, inicia uma nova
     if (!sessionData || (now - sessionData.lastActive > SESSION_TIMEOUT)) {
-      sessionData = {
-        history: [],
-        lastActive: now
-      };
+      sessionData = { history: [], lastActive: now, clientName: null };
       sessions.set(userId, sessionData);
-      console.log(`\n🧹 Sessão ${!sessionData ? 'criada' : 'reiniciada por inatividade'} para o utilizador: ${userId}`);
     }
-
-    // Atualizar o timestamp de atividade
     sessionData.lastActive = now;
 
-    // Prunar o histórico se exceder o limite (mantendo a consistência de pares user/model)
     if (sessionData.history.length > MAX_HISTORY_MESSAGES) {
       const extra = sessionData.history.length - MAX_HISTORY_MESSAGES;
       const toRemove = extra % 2 === 0 ? extra : extra + 1;
       sessionData.history = sessionData.history.slice(toRemove);
-      console.log(`✂️ Histórico prunado para ${userId}. Mensagens restantes: ${sessionData.history.length}`);
     }
 
-    // Obter modelo e criar sessão de chat dinâmica (com fallback automático se necessário)
-    let chatSession;
-    try {
-      const model = ai.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
-        systemInstruction: SYSTEM_INSTRUCTION
-      });
-      chatSession = model.startChat({ history: sessionData.history });
-    } catch (e) {
-      console.warn('⚠️ Falha ao carregar modelo primário, a usar gemini-2.5-flash...');
-      const fallbackModel = ai.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: SYSTEM_INSTRUCTION
-      });
-      chatSession = fallbackModel.startChat({ history: sessionData.history });
-    }
+    const model = ai.getGenerativeModel({
+      model: 'gemini-3.1-flash-lite',
+      systemInstruction: SYSTEM_INSTRUCTION
+    });
 
-    // Enviar mensagem do utilizador para o Gemini com retentativas automáticas
+    const chatSession = model.startChat({ history: sessionData.history });
+
     const result = await retryWithBackoff(async () => {
-      try {
-        return await chatSession.sendMessage(userMessage);
-      } catch (err) {
-        console.warn(`⚠️ Tentando com modelo alternativo (gemini-2.5-flash)...`);
-        const fallbackModel = ai.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          systemInstruction: SYSTEM_INSTRUCTION
-        });
-        const fbSession = fallbackModel.startChat({ history: sessionData.history });
-        return await fbSession.sendMessage(userMessage);
-      }
+      return await chatSession.sendMessage(userMessage);
     }, 3, 1000);
 
     let botResponse = result.response.text();
-
-    // Guardar o histórico atualizado em caso de sucesso (evita corrupção)
     sessionData.history = await chatSession.getHistory();
 
-    // Detetar e extrair a tag ###LEAD_DATA### se presente
+    // Detetar e processar lead
     const leadRegex = /###LEAD_DATA###(.*?)###/;
     const match = botResponse.match(leadRegex);
-
     if (match) {
-      const jsonStr = match[1].trim();
       try {
-        const leadData = JSON.parse(jsonStr);
-        leadData.telefone = contact?.id?.user || userId.split('@')[0]; // Adicionar contacto telefónico real
-        
-        // Guardar o nome do cliente qualificado na sessão ativa para uso posterior
-        if (leadData.nome) {
+        const leadData = JSON.parse(match[1].trim());
+        leadData.telefone = contact.id.user;
+        if (leadData.nome && !sessionData.clientName) {
           sessionData.clientName = leadData.nome;
         }
-
         salvarLead(leadData);
       } catch (e) {
-        console.error('❌ Erro ao decodificar JSON do lead:', e);
+        console.error('❌ Erro ao decodificar lead:', e);
       }
-      // Limpar a tag técnica da resposta final que vai para o cliente
       botResponse = botResponse.replace(leadRegex, '').trim();
     }
 
-    // Responder ao utilizador no WhatsApp
-    await client.sendMessage(userId, botResponse);
-    console.log(`📤 Resposta enviada: "${botResponse.split('\n')[0]}..."`);
+    await chat.sendMessage(botResponse);
+    console.log(`📤 Resposta: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
 
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem com o Gemini:', error);
-    // Guia o cliente com opções amigáveis em vez de mensagem de erro técnica e fria
-    await client.sendMessage(userId, 'De momento não consegui processar a sua questão. Se tiver alguma dúvida específica ou necessitar de suporte imediato, pode entrar em contacto direto com o nosso consultor comercial no número +244 947715166 ou escolher uma destas opções:\n\n1️⃣ Saber mais sobre Soluções de IA (Agentes de Chat, Voz e Qualidade)\n2️⃣ Ver pacotes de Chatbots de WhatsApp e Preços\n3️⃣ Casos de Sucesso e Métricas da Elite 360\n4️⃣ Quero automatizar a minha empresa / Agendar Demonstração\n5️⃣ Falar com um Consultor / Contactos');
+    console.error('❌ Erro ao processar mensagem:', error);
+    await chat.sendMessage(
+      'De momento não consigo processar o seu pedido. Por favor, contacte-nos:\n\n' +
+      '📞 *+244 930 968 888*\n' +
+      '📧 *atendimento@kixicredito.ao*\n' +
+      '🌐 *www.kixicredito.ao*'
+    );
   } finally {
-    try { await chat?.clearState(); } catch (e) {}
+    chat.clearState();
   }
 });
-
-// Inicializar o cliente
-client.initialize();
 
 // Tratar desconexão do WhatsApp
 client.on('disconnected', (reason) => {
   console.error('❌ [CHATBOT DESCONECTADO] O WhatsApp desconectou:', reason);
-  process.exit(1); // Sai para que o start.bat o reinicie automaticamente
+  process.exit(1);
 });
 
-// Tratar erros globais para evitar que o processo vá abaixo inesperadamente
+// Tratar erros globais
 process.on('uncaughtException', (error) => {
   console.error('🔥 [ERRO CRÍTICO CRASH] Uncaught Exception:', error);
 });
@@ -501,3 +431,5 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🔥 [REJEIÇÃO NÃO TRATADA] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// Inicializar cliente
+client.initialize();
