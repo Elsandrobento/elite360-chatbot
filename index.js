@@ -25,11 +25,27 @@ const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 function logMemory(label) {
   const m = process.memoryUsage();
   console.log(
-    `[MEMORY] ${label} | RSS: ${(m.rss / 1024 / 1024).toFixed(1)} MB` +
-    ` | Heap Used: ${(m.heapUsed / 1024 / 1024).toFixed(1)} MB` +
-    ` | Heap Total: ${(m.heapTotal / 1024 / 1024).toFixed(1)} MB`
+    `[MEMORY] ${label} | RSS=${(m.rss / 1024 / 1024).toFixed(1)}MB` +
+    ` HEAP=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB/${(m.heapTotal / 1024 / 1024).toFixed(1)}MB` +
+    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB` +
+    ` ARRAYBUF=${(m.arrayBuffers / 1024 / 1024).toFixed(1)}MB`
   );
 }
+
+// ============================================================
+//  MONITOR PERIÓDICO DE MEMÓRIA (a cada 30 segundos)
+//  Permite ver crescimento de RAM nos logs do Render sem enviar mensagens
+// ============================================================
+setInterval(() => {
+  const m = process.memoryUsage();
+  const sessions_count = sessions ? sessions.size : 0;
+  console.log(
+    `[MEMORY_MONITOR] RSS=${(m.rss / 1024 / 1024).toFixed(1)}MB` +
+    ` HEAP=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB/${(m.heapTotal / 1024 / 1024).toFixed(1)}MB` +
+    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB` +
+    ` SESSIONS=${sessions_count}`
+  );
+}, 30000).unref(); // .unref() para não bloquear shutdown do processo
 
 // ============================================================
 //  ESTADO DA APLICAÇÃO
@@ -235,13 +251,32 @@ Quando um cliente demonstrar interesse em pedir crédito e recolheres dados sufi
 // ============================================================
 //  CONFIGURAÇÕES DO SISTEMA
 // ============================================================
-const SESSION_TIMEOUT = 30 * 60 * 1000;
-// REDUZIDO de 20 para 10 — menos contexto em memória por utilizador ativo
-const MAX_HISTORY_MESSAGES = 10;
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+// REDUZIDO de 20 para 6 (3 turnos user+bot) — mínimo funcional para contexto
+const MAX_HISTORY_MESSAGES = 6;
 const MANAGER_NUMBER = process.env.MANAGER_NUMBER || '244930968888@c.us';
 const LEADS_FILE = path.join(process.cwd(), 'kixi_leads.json');
 const SESSION_PATH = process.env.SESSION_PATH || './';
 const sessions = new Map();
+
+// ============================================================
+//  LIMPEZA PERIÓDICA DE SESSÕES EXPIRADAS
+//  Sem isto, sessions cresce indefinidamente em memória
+//  pois entradas antigas nunca são removidas.
+// ============================================================
+setInterval(() => {
+  const now = Date.now();
+  let removed = 0;
+  for (const [userId, sessionData] of sessions.entries()) {
+    if (now - sessionData.lastActive > SESSION_TIMEOUT) {
+      sessions.delete(userId);
+      removed++;
+    }
+  }
+  if (removed > 0) {
+    console.log(`[SESSION_GC] Removed ${removed} expired session(s). Active sessions: ${sessions.size}`);
+  }
+}, 5 * 60 * 1000).unref(); // Executa a cada 5 minutos
 
 // ============================================================
 //  FUNÇÕES AUXILIARES
@@ -380,9 +415,6 @@ client.on('disconnected', (reason) => {
 // ============================================================
 //  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
 // ============================================================
-// ============================================================
-//  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
-// ============================================================
 client.on('message_create', async (msg) => {
   // Ignorar mensagens enviadas pelo próprio bot
   if (msg.fromMe) {
@@ -503,7 +535,13 @@ client.on('message_create', async (msg) => {
     // Tentar modelos válidos do Gemini (gemini-1.5-flash primeiro, depois gemini-2.0-flash)
     const primaryModelName = 'gemini-1.5-flash';
     const fallbackModelName = 'gemini-2.0-flash';
-    
+
+    // Log do tamanho do prompt para diagnóstico de memória
+    const historyChars = JSON.stringify(sessionData.history).length;
+    console.log(`[AI] System prompt chars: ${SYSTEM_INSTRUCTION.length}`);
+    console.log(`[AI] History chars: ${historyChars} (${sessionData.history.length} msgs)`);
+    console.log(`[AI] User message chars: ${userMessage.length}`);
+    console.log(`[AI] Total approx chars: ${SYSTEM_INSTRUCTION.length + historyChars + userMessage.length}`);
     console.log(`[AI] Calling Gemini (Model: ${primaryModelName})`);
     
     let botResponse = null;
@@ -520,7 +558,7 @@ client.on('message_create', async (msg) => {
 
       botResponse = result.response.text();
       sessionData.history = await chatSession.getHistory();
-      console.log(`[AI] Gemini response received from ${primaryModelName} (Length: ${botResponse.length})`);
+      console.log(`[AI] Gemini response received from ${primaryModelName} (Length: ${botResponse.length} chars)`);
     } catch (primaryErr) {
       console.warn(`⚠️ [AI] Primary model ${primaryModelName} failed: ${primaryErr.message || primaryErr}. Trying fallback ${fallbackModelName}...`);
       
@@ -536,7 +574,7 @@ client.on('message_create', async (msg) => {
 
       botResponse = result.response.text();
       sessionData.history = await fallbackSession.getHistory();
-      console.log(`[AI] Gemini response received from fallback ${fallbackModelName} (Length: ${botResponse.length})`);
+      console.log(`[AI] Gemini response received from fallback ${fallbackModelName} (Length: ${botResponse.length} chars)`);
     }
 
     // Detetar e processar lead
