@@ -131,6 +131,23 @@ class Store {
   }
 
   /**
+   * Adiciona ou atualiza um utilizador existente pelo telefone.
+   * @param {Object} userData 
+   * @returns {Object}
+   */
+  addUserOrUpdate(userData) {
+    const phone = normalizePhone(userData.phone);
+    if (!phone) {
+      throw new Error('Número de telefone inválido.');
+    }
+    const existing = this.getUserByPhone(phone);
+    if (existing) {
+      return this.updateUser(phone, userData);
+    }
+    return this.addUser(userData);
+  }
+
+  /**
    * Atualiza dados de um utilizador existente.
    * @param {string} rawPhone 
    * @param {Object} updates 

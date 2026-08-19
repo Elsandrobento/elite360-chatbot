@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KIXI IA — Copiloto Inteligente para Atendimento e Operações | KixiCrédito S.A.</title>
+  
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <style>
+    /* ============================================================
+       DESIGN SYSTEM & CSS TOKENS (PREMIUM ENTERPRISE FINTECH)
+       ============================================================ */
+    :root {
+      --font-title: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      
+      /* Cores KixiCrédito & WhatsApp */
+      --kixi-primary: #00a884;
+      --kixi-primary-light: #25d366;
+      --kixi-primary-dark: #008069;
+      --kixi-glow: rgba(0, 168, 132, 0.22);
+      
+      --accent-blue: #0284c7;
+      --accent-gold: #f59e0b;
+      --accent-red: #ef4444;
+      
+      /* Dark Theme (Default) */
+      --bg-color: #080d11;
+      --bg-card: rgba(17, 27, 33, 0.85);
+      --bg-card-solid: #111b21;
+      --bg-card-hover: rgba(24, 34, 41, 0.95);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-active: rgba(0, 168, 132, 0.45);
+      
+      --text-primary: #f9fafb;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      /* WhatsApp Device Styles */
+      --wa-header-bg: #202c33;
+      --wa-chat-bg: #0b141a;
+      --wa-msg-in: #202c33;
+      --wa-msg-out: #005c4b;
+      --wa-text-in: #e2e8f0;
+      --wa-text-out: #f8fafc;
+      
+      --shadow-card: 0 12px 32px -4px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 0 40px rgba(0, 168, 132, 0.15);
+      
+      --transition-smooth: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      --transition-fast: all 0.2s ease;
+    }
+
+    body.light-theme {
+      --bg-color: #f8fafc;
+      --bg-card: rgba(255, 255, 255, 0.92);
+      --bg-card-solid: #ffffff;
+      --bg-card-hover: #ffffff;
+      --card-border: rgba(0, 0, 0, 0.08);
+      --card-border-active: rgba(0, 168, 132, 0.55);
+      
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      
+      --wa-header-bg: #008069;
+      --wa-chat-bg: #efeae2;
+      --wa-msg-in: #ffffff;
+      --wa-msg-out: #d9fdd3;
+      --wa-text-in: #1e293b;
+      --wa-text-out: #0f172a;
+      
+      --shadow-card: 0 10px 30px -4px rgba(0, 0, 0, 0.08);
+      --shadow-glow: 0 0 30px rgba(0, 168, 132, 0.12);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      transition: background-color 0.4s ease, color 0.4s ease;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Container Principal */
+    .presentation-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Background Elements */
+    .bg-ambient-glow {
+      position: absolute;
+      top: -20%;
+      right: -10%;
+      width: 55vw;
+      height: 55vw;
+      background: radial-gradient(circle, rgba(0, 168, 132, 0.12) 0%, rgba(0, 168, 132, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .bg-grid {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    body.light-theme .bg-grid {
+      background-image: linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    }
+
+    /* Barra Superior */
+    .top-navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.4rem 3.5rem;
+      z-index: 100;
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      pointer-events: none;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      pointer-events: auto;
+    }
+
+    .brand-icon-box {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--kixi-primary), var(--kixi-primary-dark));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-family: var(--font-title);
+      font-weight: 900;
+      font-size: 1.15rem;
+      box-shadow: 0 4px 12px rgba(0, 168, 132, 0.35);
+    }
+
+    .brand-text {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-primary);
+    }
+
+    .brand-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      background: rgba(0, 168, 132, 0.14);
+      color: var(--kixi-primary);
+      border: 1px solid var(--card-border-active);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      pointer-events: auto;
+    }
+
+    .btn-icon {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      color: var(--text-secondary);
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition-fast);
+      backdrop-filter: blur(16px);
+    }
+
+    .btn-icon:hover {
+      background: rgba(0, 168, 132, 0.12);
+      border-color: var(--kixi-primary);
+      color: var(--kixi-primary);
+      transform: translateY(-2px);
+    }
+
+    /* Slides Wrapper */
+    .slides-wrapper {
+      position: relative;
+      flex-grow: 1;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.985) translateY(14px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  visibility 0.5s;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 5.5rem 5rem 5rem 5rem;
+      box-sizing: border-box;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1) translateY(0);
+    }
+
+    /* Tipografia de Cabeçalho */
+    .slide-header {
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .slide-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      padding: 0.35rem 0.9rem;
+      border-radius: 9999px;
+      background: rgba(0, 168, 132, 0.12);
+      border: 1px solid var(--card-border-active);
+      color: var(--kixi-primary);
+      margin-bottom: 0.75rem;
+    }
+
+    .slide-title {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 2.5rem;
+      line-height: 1.18;
+      letter-spacing: -0.025em;
+      color: var(--text-primary);
+      max-width: 980px;
+    }
+
+    .slide-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      margin-top: 0.6rem;
+      max-width: 860px;
+      line-height: 1.5;
+    }
+
+    /* Grids & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.2rem;
+      align-items: center;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.6rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.35rem;
+    }
+
+    .card-modern {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.8rem;
+      box-shadow: var(--shadow-card);
+      transition: var(--transition-smooth);
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+    }
+
+    .card-modern:hover {
+      border-color: var(--card-border-active);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px -10px rgba(0, 168, 132, 0.15);
+    }
+
+    .card-modern.highlight {
+      border-top: 4px solid var(--kixi-primary);
+      background: linear-gradient(180deg, rgba(0, 168, 132, 0.06) 0%, var(--bg-card) 100%);
+    }
+
+    .card-icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(0, 168, 132, 0.12);
+      border: 1px solid var(--card-border-active);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--kixi-primary);
+      margin-bottom: 1.2rem;
+      font-size: 1.3rem;
+    }
+
+    .card-title {
+      font-family: var(--font-title);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.55rem;
+    }
+
+    .card-desc {
+      font-size: 0.93rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .card-desc strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Listas Executivas */
+    .executive-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.95rem;
+      margin-top: 1rem;
+    }
+
+    .executive-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.9rem;
+      font-size: 0.98rem;
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .executive-bullet {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(0, 168, 132, 0.15);
+      color: var(--kixi-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* Status Pills */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .pill.available {
+      background: rgba(0, 168, 132, 0.15);
+      color: var(--kixi-primary);
+      border: 1px solid var(--card-border-active);
+    }
+
+    .pill.future {
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(2, 132, 199, 0.35);
+    }
+
+    .pill.warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-gold);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    /* Mockup WhatsApp Premium */
+    .wa-mockup {
+      background: var(--bg-card-solid);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      max-width: 480px;
+      width: 100%;
+      margin: 0 auto;
+      border-top: 4px solid var(--kixi-primary);
+    }
+
+    .wa-mockup-header {
+      background: var(--wa-header-bg);
+      padding: 1rem 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .wa-mockup-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--kixi-primary), var(--kixi-primary-dark));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #ffffff;
+      font-size: 1.15rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .wa-mockup-name {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .wa-mockup-sub {
+      font-size: 0.76rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .wa-mockup-body {
+      padding: 1.4rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: var(--wa-chat-bg);
+      min-height: 290px;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+
+    .wa-bubble {
+      max-width: 88%;
+      padding: 0.85rem 1.1rem;
+      border-radius: 14px;
+      font-size: 0.88rem;
+      line-height: 1.48;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .wa-bubble.in {
+      background: var(--wa-msg-in);
+      color: var(--wa-text-in);
+      align-self: flex-start;
+      border-top-left-radius: 2px;
+    }
+
+    .wa-bubble.out {
+      background: var(--wa-msg-out);
+      color: var(--wa-text-out);
+      align-self: flex-end;
+      border-top-right-radius: 2px;
+      border-left: 3px solid var(--kixi-primary);
+    }
+
+    .wa-bubble-time {
+      font-size: 0.68rem;
+      color: rgba(255, 255, 255, 0.5);
+      text-align: right;
+      margin-top: 5px;
+    }
+
+    body.light-theme .wa-bubble.in .wa-bubble-time { color: rgba(0, 0, 0, 0.4); }
+    body.light-theme .wa-bubble.out .wa-bubble-time { color: rgba(0, 0, 0, 0.4); }
+
+    /* Barra Inferior */
+    .bottom-navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.4rem 3.5rem;
+      z-index: 100;
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      pointer-events: none;
+    }
+
+    .progress-track {
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%; height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 8.33%;
+      background: linear-gradient(90deg, var(--kixi-primary), var(--kixi-primary-light));
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .nav-btn-group {
+      display: flex;
+      gap: 0.75rem;
+      pointer-events: auto;
+    }
+
+    .btn-nav {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      color: var(--text-primary);
+      padding: 0.65rem 1.4rem;
+      border-radius: 10px;
+      font-family: var(--font-title);
+      font-weight: 600;
+      font-size: 0.92rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      transition: var(--transition-fast);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(12px);
+    }
+
+    .btn-nav:hover:not(:disabled) {
+      background: var(--kixi-primary);
+      color: #ffffff;
+      border-color: var(--kixi-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 168, 132, 0.3);
+    }
+
+    .btn-nav:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .slide-counter {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      pointer-events: auto;
+    }
+
+    /* Drawer de Índice */
+    .drawer {
+      position: fixed;
+      top: 0; right: -400px;
+      width: 380px; height: 100vh;
+      background: var(--bg-card-solid);
+      border-left: 1px solid var(--card-border);
+      z-index: 1000;
+      box-shadow: -12px 0 40px rgba(0, 0, 0, 0.5);
+      transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      padding: 2.2rem;
+    }
+
+    .drawer.open { right: 0; }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.8rem;
+      padding-bottom: 1.2rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .drawer-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1.35rem;
+      color: var(--text-primary);
+    }
+
+    .drawer-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.8rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .drawer-list {
+      list-style: none;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .drawer-item {
+      padding: 0.85rem 1.1rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .drawer-item:hover, .drawer-item.active {
+      background: rgba(0, 168, 132, 0.15);
+      border-color: var(--kixi-primary);
+      color: var(--kixi-primary);
+      transform: translateX(4px);
+    }
+
+    .drawer-num {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 0.82rem;
+      opacity: 0.7;
+    }
+
+    /* Diagrama Slide 3 */
+    .flow-pipeline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.2rem;
+      margin-top: 2rem;
+    }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 1.8rem 1.4rem;
+      text-align: center;
+      flex: 1;
+      box-shadow: var(--shadow-card);
+      transition: var(--transition-smooth);
+      position: relative;
+    }
+
+    .flow-step.highlight {
+      border-color: var(--kixi-primary);
+      background: linear-gradient(145deg, var(--bg-card) 0%, rgba(0, 168, 132, 0.12) 100%);
+      transform: scale(1.03);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .flow-connector {
+      color: var(--kixi-primary);
+      font-size: 1.8rem;
+      font-weight: 900;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Drawer Menu para navegação rápida -->
+  <div id="slideDrawer" class="drawer">
+    <div class="drawer-header">
+      <h3 class="drawer-title">Índice Executivo</h3>
+      <button id="btnDrawerClose" class="drawer-close" aria-label="Fechar">&times;</button>
+    </div>
+    <ul id="drawerList" class="drawer-list"></ul>
+  </div>
+
+  <div class="presentation-container">
+    <div class="bg-ambient-glow"></div>
+    <div class="bg-grid"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="top-navbar">
+      <div class="brand-group">
+        <div class="brand-icon-box">K</div>
+        <span class="brand-text">KixiCrédito S.A.</span>
+        <span class="brand-badge">Institucional</span>
+      </div>
+      <div class="controls">
+        <button id="btnTheme" class="btn-icon" title="Alternar Tema Claro/Escuro" aria-label="Tema">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+          </svg>
+        </button>
+        <button id="btnIndex" class="btn-icon" title="Índice de Slides" aria-label="Índice">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <button id="btnFullscreen" class="btn-icon" title="Ecrã Completo" aria-label="Ecrã Completo">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Wrapper dos 12 Slides -->
+    <main class="slides-wrapper">
+
+      <!-- ========================================== -->
+      <!-- SLIDE 1 — CAPA                             -->
+      <!-- ========================================== -->
+      <section class="slide active" data-title="Capa Executiva">
+        <div style="max-width: 960px; margin: 0 auto; text-align: center;">
+          <div class="slide-tag" style="margin-bottom: 1.8rem;">Apresentação Executiva para Decisores</div>
+          <h1 style="font-family: var(--font-title); font-size: 4.4rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.06; margin-bottom: 1.1rem;">
+            KIXI <span style="color: var(--kixi-primary);">IA</span>
+          </h1>
+          <h2 style="font-family: var(--font-title); font-size: 1.85rem; font-weight: 600; color: #cbd5e1; margin-bottom: 2.2rem; letter-spacing: -0.01em;">
+            COPILOTO INTELIGENTE PARA ATENDIMENTO E OPERAÇÕES
+          </h2>
+          
+          <div style="display: inline-block; background: rgba(0, 168, 132, 0.12); border: 1px solid var(--card-border-active); padding: 1.1rem 2.5rem; border-radius: 9999px; margin-bottom: 3.2rem; box-shadow: var(--shadow-glow);">
+            <p style="font-size: 1.3rem; font-weight: 600; color: var(--kixi-primary); font-style: italic;">
+              «Conhecimento Kixi. Disponível quando é necessário.»
+            </p>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; border-top: 1px solid var(--card-border); padding-top: 2rem; max-width: 760px; margin: 0 auto; text-align: center;">
+            <div>
+              <div style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Destinatários</div>
+              <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-top: 0.3rem;">Administração & Direção</div>
+            </div>
+            <div>
+              <div style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Canal Integrado</div>
+              <div style="font-size: 0.95rem; font-weight: 600; color: var(--kixi-primary); margin-top: 0.3rem;">WhatsApp Oficial</div>
+            </div>
+            <div>
+              <div style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Âmbito</div>
+              <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-top: 0.3rem;">Atendimento & Copiloto</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 2 — O DESAFIO                        -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="O Desafio">
+        <div class="slide-header">
+          <div class="slide-tag">Diagnóstico Operacional</div>
+          <h2 class="slide-title">«Quando o conhecimento está disperso, o tempo perde-se.»</h2>
+          <p class="slide-subtitle">A documentação e os procedimentos existem, mas o acesso ágil e consistente no momento exato da interação representa um desafio diário.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card-modern highlight">
+            <div class="card-icon-wrap">
+              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <div class="card-title">Cenário no Contacto com o Cliente</div>
+            <ul class="executive-list">
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Dúvidas recorrentes:</strong> Questões contínuas sobre prazos, montantes e garantias fora do horário comercial.</span>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Incerteza sobre documentação:</strong> Clientes chegam à agência sem os comprovativos obrigatórios completos.</span>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Expectativa de rapidez:</strong> Necessidade de orientação direta sem atritos ou barreiras de canais.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="card-icon-wrap">
+              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </div>
+            <div class="card-title">Cenário na Operação dos Agentes</div>
+            <ul class="executive-list">
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Informação distribuída:</strong> Consulta manual e dispersa de múltiplas Fichas Técnicas Informativas (FTIs).</span>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Tempo gasto em pesquisa:</strong> Minutos preciosos perdidos à procura de regras em vez de atender e captar.</span>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">•</span>
+                <span><strong>Diferentes níveis de acesso:</strong> Salvaguardar que dados confidenciais permanecem estritamente autorizados.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.8rem; text-align: center; background: rgba(0, 168, 132, 0.08); border: 1px solid var(--card-border-active); padding: 1rem 2rem; border-radius: 12px;">
+          <span style="color: var(--kixi-primary); font-weight: 700;">Mensagem Central:</span>
+          <span style="color: var(--text-primary); font-weight: 500;"> «O desafio não é apenas ter informação. É conseguir utilizá-la no momento certo.»</span>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 3 — A IDEIA                          -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="A Ideia">
+        <div class="slide-header">
+          <div class="slide-tag">Conceito Estratégico</div>
+          <h2 class="slide-title">«E se o conhecimento da Kixi estivesse disponível através de uma conversa?»</h2>
+          <p class="slide-subtitle">O KIXI IA transforma o WhatsApp num ponto de acesso direto, inteligente e autorizado ao conhecimento oficial da KixiCrédito.</p>
+        </div>
+
+        <div class="flow-pipeline">
+          <div class="flow-step">
+            <div class="card-icon-wrap" style="margin: 0 auto 1rem auto;">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            </div>
+            <div style="font-family: var(--font-title); font-weight: 800; font-size: 1.15rem; color: var(--text-primary);">PERGUNTA</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.4rem;">O utilizador escreve em linguagem natural no WhatsApp.</div>
+          </div>
+          
+          <div class="flow-connector">➔</div>
+
+          <div class="flow-step highlight">
+            <div class="card-icon-wrap" style="margin: 0 auto 1rem auto; background: var(--kixi-primary); color: #ffffff;">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <div style="font-family: var(--font-title); font-weight: 800; font-size: 1.15rem; color: var(--kixi-primary);">KIXI IA</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.4rem;">Interpreta a intenção e valida o perfil de segurança.</div>
+          </div>
+
+          <div class="flow-connector">➔</div>
+
+          <div class="flow-step">
+            <div class="card-icon-wrap" style="margin: 0 auto 1rem auto;">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <div style="font-family: var(--font-title); font-weight: 800; font-size: 1.15rem; color: var(--text-primary);">CONHECIMENTO</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.4rem;">Consulta as FTIs e regulamentos oficiais sem alucinações.</div>
+          </div>
+
+          <div class="flow-connector">➔</div>
+
+          <div class="flow-step">
+            <div class="card-icon-wrap" style="margin: 0 auto 1rem auto;">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div style="font-family: var(--font-title); font-weight: 800; font-size: 1.15rem; color: var(--text-primary);">RESPOSTA</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.4rem;">Entrega resposta estruturada e orientada à ação.</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top: 2.2rem;">
+          <div class="card-modern" style="padding: 1.3rem 1.6rem;">
+            <div style="color: var(--kixi-primary); font-weight: 700; font-size: 1rem; margin-bottom: 0.3rem;">✓ Nativo no WhatsApp</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary);">Sem necessidade de instalar aplicações nem criar novas contas.</div>
+          </div>
+          <div class="card-modern" style="padding: 1.3rem 1.6rem;">
+            <div style="color: var(--kixi-primary); font-weight: 700; font-size: 1rem; margin-bottom: 0.3rem;">✓ Zero Invenção</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary);">Respostas 100% ancoradas nas tabelas e regras oficiais da KixiCrédito.</div>
+          </div>
+          <div class="card-modern" style="padding: 1.3rem 1.6rem;">
+            <div style="color: var(--kixi-primary); font-weight: 700; font-size: 1rem; margin-bottom: 0.3rem;">✓ Disponibilidade Total</div>
+            <div style="font-size: 0.88rem; color: var(--text-secondary);">Canal disponível 24 horas por dia, 365 dias por ano.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 4 — KIXI IA PARA CLIENTES            -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Kixi IA para Clientes">
+        <div class="grid-2">
+          <div>
+            <div class="slide-header" style="margin-bottom: 1.6rem;">
+              <div class="slide-tag">Atendimento ao Cliente</div>
+              <h2 class="slide-title" style="font-size: 2.3rem;">«O cliente pergunta. O KIXI IA responde.»</h2>
+              <p class="slide-subtitle" style="font-size: 1.02rem;">Apresentação acessível das soluções reais da KixiCrédito com base estrita nas Fichas Técnicas Informativas.</p>
+            </div>
+
+            <ul class="executive-list">
+              <li class="executive-item">
+                <span class="executive-bullet">✓</span>
+                <div>
+                  <strong>Produtos Reais & Oficiais:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">Enquadra KixiFácil (até 500 mil Kz), KixiNegócio (até 2,5M Kz), KixiAgronegócio e KixiValor.</div>
+                </div>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">✓</span>
+                <div>
+                  <strong>Disponível no WhatsApp:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">O canal que os clientes já utilizam diariamente, sem custos de aprendizagem.</div>
+                </div>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">✓</span>
+                <div>
+                  <strong>Sem nova aplicação:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">Zero fricção de download ou registo — basta enviar mensagem.</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Mockup WhatsApp Cliente -->
+          <div class="wa-mockup">
+            <div class="wa-mockup-header">
+              <div class="wa-mockup-avatar">K</div>
+              <div>
+                <div class="wa-mockup-name">KixiCrédito Atendimento</div>
+                <div class="wa-mockup-sub">Canal Oficial Verificado</div>
+              </div>
+            </div>
+            <div class="wa-mockup-body">
+              <div class="wa-bubble in">
+                Olá, boa tarde! Preciso de um financiamento para reforçar o stock da minha mercearia. O que têm disponível?
+                <div class="wa-bubble-time">14:10</div>
+              </div>
+              <div class="wa-bubble out">
+                Olá! Para pequenos negócios e comércio, a KixiCrédito dispõe de:<br><br>
+                • <strong>KixiFácil:</strong> De 5.000 Kz até 500.000 Kz (prazo até 12 meses)<br>
+                • <strong>KixiNegócio:</strong> De 500.001 Kz até 2.500.000 Kz (prazo até 18 meses)<br><br>
+                Taxa de juro contratada: 4,6% ao mês (55,2% TAN).<br>
+                Gostaria de saber quais são os documentos necessários para avançar?
+                <div class="wa-bubble-time">14:10 ✓✓</div>
+              </div>
+              <div class="wa-bubble in">
+                Sim, que documentos preciso apresentar?
+                <div class="wa-bubble-time">14:11</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 5 — UMA EXPERIÊNCIA MAIS INTELIGENTE  -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Condução & Orientação">
+        <div class="slide-header">
+          <div class="slide-tag">Condução de Conversa</div>
+          <h2 class="slide-title">«Não é apenas responder. É orientar.»</h2>
+          <p class="slide-subtitle">O assistente não se limita a responder de forma isolada; qualifica e orienta o cliente para o balcão certo.</p>
+        </div>
+
+        <div class="grid-4" style="margin-top: 1.6rem;">
+          <div class="card-modern highlight">
+            <div style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; color: var(--kixi-primary); margin-bottom: 0.6rem;">01</div>
+            <div class="card-title" style="font-size: 1.15rem;">Compreensão</div>
+            <p class="card-desc">Identifica a atividade económica do cliente (comércio, agricultura, assalariado).</p>
+          </div>
+
+          <div class="card-modern highlight">
+            <div style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; color: var(--kixi-primary); margin-bottom: 0.6rem;">02</div>
+            <div class="card-title" style="font-size: 1.15rem;">Enquadramento</div>
+            <p class="card-desc">Apresenta o produto adequado, limites oficiais de montante e prazos disponíveis.</p>
+          </div>
+
+          <div class="card-modern highlight">
+            <div style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; color: var(--kixi-primary); margin-bottom: 0.6rem;">03</div>
+            <div class="card-title" style="font-size: 1.15rem;">Checklist Prévia</div>
+            <p class="card-desc">Lista detalhada dos documentos para o cliente reunir antes de se deslocar.</p>
+          </div>
+
+          <div class="card-modern highlight">
+            <div style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; color: var(--kixi-primary); margin-bottom: 0.6rem;">04</div>
+            <div class="card-title" style="font-size: 1.15rem;">Encaminhamento</div>
+            <p class="card-desc">Direciona o cliente para a agência Kixi mais conveniente para submissão do processo.</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 2.2rem; text-align: center; background: linear-gradient(135deg, rgba(0, 168, 132, 0.1) 0%, rgba(0, 168, 132, 0.02) 100%); border: 1px solid var(--card-border-active); padding: 1.2rem 2.2rem; border-radius: 16px; max-width: 880px; margin-left: auto; margin-right: auto;">
+          <p style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary);">
+            «O objetivo não é simplesmente responder a perguntas. É ajudar o cliente a avançar no processo com segurança.»
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 6 — O COPILOTO DO AGENTE             -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Copiloto do Agente">
+        <div class="grid-2">
+          <div>
+            <div class="slide-header" style="margin-bottom: 1.6rem;">
+              <div class="slide-tag">Apoio Interno às Equipas</div>
+              <h2 class="slide-title" style="font-size: 2.3rem;">«O agente passa a ter um copiloto no bolso.»</h2>
+              <p class="slide-subtitle" style="font-size: 1.02rem;">Assistente operacional dedicado para esclarecer procedimentos, regras de garantias e critérios em tempo real.</p>
+            </div>
+
+            <ul class="executive-list">
+              <li class="executive-item">
+                <span class="executive-bullet">⚡</span>
+                <div>
+                  <strong>Procedimentos Oficiais Instantâneos:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">Garantias aceites, comissões de processamento (6,5%) e fundos de imprevistos (2%).</div>
+                </div>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">⏳</span>
+                <div>
+                  <strong>Menos tempo à procura de informação:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">Elimina consultas manuais de manuais e telefonemas repetitivos durante o atendimento.</div>
+                </div>
+              </li>
+              <li class="executive-item">
+                <span class="executive-bullet">📈</span>
+                <div>
+                  <strong>Mais tempo a atender e captar:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-secondary);">Equipas mais autónomas, ágeis e preparadas no balcão e em visitas de terreno.</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Mockup WhatsApp Agente -->
+          <div class="wa-mockup">
+            <div class="wa-mockup-header" style="background: #1e3a8a;">
+              <div class="wa-mockup-avatar" style="background: #2563eb;">K</div>
+              <div>
+                <div class="wa-mockup-name">Kixi Copilot (Equipas)</div>
+                <div class="wa-mockup-sub">Agente Autorizado • Zango</div>
+              </div>
+            </div>
+            <div class="wa-mockup-body">
+              <div class="wa-bubble in">
+                Copilot, quais são as garantias exigidas para o KixiAgronegócio?
+                <div class="wa-bubble-time">09:45</div>
+              </div>
+              <div class="wa-bubble out">
+                Olá, Colega! De acordo com a FTI oficial do <strong>KixiAgronegócio</strong>:<br><br>
+                • <strong>Garantias Exigidas:</strong> Avalista, Hipoteca, Penhor e Caução.<br>
+                • <strong>Regime de Prestações:</strong> Mensal ou Quadrimestral (ajustado ao ciclo agrícola).<br>
+                • <strong>Encargos:</strong> Comissão de processamento (6,5%) + Imprevistos (2%).<br><br>
+                Deseja conferir a lista de documentos para esta proposta?
+                <div class="wa-bubble-time">09:45 ✓✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 7 — VERIFICAÇÃO DE DOCUMENTAÇÃO      -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Checklist Documental">
+        <div class="grid-2">
+          <div>
+            <div class="slide-header" style="margin-bottom: 1.6rem;">
+              <div class="slide-tag">Conferência Inteligente</div>
+              <h2 class="slide-title" style="font-size: 2.3rem;">«Uma conversa pode ajudar o agente a identificar o que falta.»</h2>
+              <p class="slide-subtitle" style="font-size: 1.02rem;">O agente descreve os documentos que tem em mãos e o KIXI IA compara com os requisitos oficiais do produto.</p>
+            </div>
+
+            <div class="card-modern" style="margin-bottom: 1.2rem; padding: 1.4rem;">
+              <div style="font-weight: 700; color: var(--kixi-primary); margin-bottom: 0.4rem;">📝 Como Funciona no WhatsApp:</div>
+              <div style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                O agente não necessita de enviar ficheiros ou fotos pesadas. Basta escrever em texto simples o que foi recolhido.
+              </div>
+            </div>
+
+            <div style="background: rgba(245, 158, 11, 0.08); border-left: 4px solid var(--accent-gold); padding: 1rem 1.3rem; border-radius: 8px; font-size: 0.88rem; color: var(--text-primary); line-height: 1.45;">
+              <strong>⚠️ Nota de Rigor:</strong> A IA não valida pericialmente a autenticidade física dos documentos. Atua como uma <strong>checklist de conformidade</strong> para apoiar o agente a não submeter processos incompletos.
+            </div>
+          </div>
+
+          <!-- Mockup WhatsApp Checklist -->
+          <div class="wa-mockup">
+            <div class="wa-mockup-header" style="background: #1e3a8a;">
+              <div class="wa-mockup-avatar" style="background: #2563eb;">K</div>
+              <div>
+                <div class="wa-mockup-name">Kixi Copilot — Checklist</div>
+                <div class="wa-mockup-sub">Agente Autorizado • Mutamba</div>
+              </div>
+            </div>
+            <div class="wa-mockup-body">
+              <div class="wa-bubble in">
+                Para um processo KixiNegócio, o cliente entregou BI, comprovativo de residência e extrato bancário.
+                <div class="wa-bubble-time">11:15</div>
+              </div>
+              <div class="wa-bubble out">
+                📋 <strong>VERIFICAÇÃO — KIXINEGÓCIO</strong><br><br>
+                <strong>Documentos identificados:</strong><br>
+                ✓ Bilhete de Identidade válido<br>
+                ✓ Comprovativo de Residência<br>
+                ✓ Declaração / Extrato bancário<br><br>
+                <strong>Documentos ainda em falta:</strong><br>
+                ❌ Declaração de Rendimentos / Faturação<br>
+                ❌ Comprovativo de Garantias (Avalista/Caução)<br>
+                ❌ Formulário de pedido de crédito<br><br>
+                ➡️ <em>Solicitar os 3 documentos em falta antes de submeter à análise.</em>
+                <div class="wa-bubble-time">11:15 ✓✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 8 — ACESSO CONTROLADO                -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Segurança & Perfis">
+        <div class="slide-header">
+          <div class="slide-tag">Segurança & Governação</div>
+          <h2 class="slide-title">«Nem todos precisam de ter acesso à mesma informação.»</h2>
+          <p class="slide-subtitle">Reconhecimento seguro de perfis através dos números de WhatsApp autorizados no sistema.</p>
+        </div>
+
+        <div class="grid-4" style="margin-top: 1.6rem;">
+          <div class="card-modern highlight">
+            <div class="pill available" style="margin-bottom: 0.8rem;">Público Geral</div>
+            <div class="card-title" style="font-size: 1.2rem;">CLIENTE</div>
+            <ul class="executive-list" style="gap: 0.5rem; font-size: 0.88rem; color: var(--text-secondary);">
+              <li>• Atendimento 24/7</li>
+              <li>• Catálogo de produtos</li>
+              <li>• Requisitos gerais</li>
+              <li>• Contactos e balcões</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="pill available" style="margin-bottom: 0.8rem;">Staff Autorizado</div>
+            <div class="card-title" style="font-size: 1.2rem;">AGENTE</div>
+            <ul class="executive-list" style="gap: 0.5rem; font-size: 0.88rem; color: var(--text-secondary);">
+              <li>• Procedimentos operacionais</li>
+              <li>• Checklists de documentação</li>
+              <li>• Regras de garantias</li>
+              <li>• Apoio à pré-análise</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="pill available" style="margin-bottom: 0.8rem;">Gestão Local</div>
+            <div class="card-title" style="font-size: 1.2rem;">GESTOR</div>
+            <ul class="executive-list" style="gap: 0.5rem; font-size: 0.88rem; color: var(--text-secondary);">
+              <li>• Indicadores da sua agência</li>
+              <li>• Dúvidas da equipa</li>
+              <li>• Casos incompletos</li>
+              <li>• Apoio à supervisão</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="pill available" style="margin-bottom: 0.8rem;">Supervisão Global</div>
+            <div class="card-title" style="font-size: 1.2rem;">ADMIN</div>
+            <ul class="executive-list" style="gap: 0.5rem; font-size: 0.88rem; color: var(--text-secondary);">
+              <li>• Visão global de todas as agências</li>
+              <li>• Gestão de utilizadores</li>
+              <li>• Ativação e desativação</li>
+              <li>• Métricas de utilização</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem; text-align: center; color: var(--text-secondary); font-size: 0.95rem;">
+          🔒 <strong>Controlo Rigoroso:</strong> O conhecimento interno e as métricas gerenciais nunca são expostos a contactos não autorizados.
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 9 — PARA GESTORES E ADMINISTRADORES  -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Gestão & Supervisão">
+        <div class="slide-header">
+          <div class="slide-tag">Inteligência de Gestão</div>
+          <h2 class="slide-title">«O KIXI IA pode tornar-se uma camada de inteligência operacional.»</h2>
+          <p class="slide-subtitle">Potencial de supervisão e visibilidade gerencial estruturado como roteiro de evolução contínua.</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 1.6rem;">
+          <div class="card-modern">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <div class="card-icon-wrap" style="margin-bottom: 0;">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              </div>
+              <span class="pill future">Evolução Possível</span>
+            </div>
+            <div class="card-title">Mapeamento de Dúvidas</div>
+            <p class="card-desc">Identificar em tempo real quais são os produtos e regras que geram maior incerteza entre clientes e novas equipas.</p>
+          </div>
+
+          <div class="card-modern">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <div class="card-icon-wrap" style="margin-bottom: 0;">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              </div>
+              <span class="pill future">Evolução Possível</span>
+            </div>
+            <div class="card-title">Redução de Retrabalho</div>
+            <p class="card-desc">Monitorizar falhas documentais recorrentes por agência para orientar ações pontuais de reforço de formação.</p>
+          </div>
+
+          <div class="card-modern">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <div class="card-icon-wrap" style="margin-bottom: 0;">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              </div>
+              <span class="pill future">Evolução Possível</span>
+            </div>
+            <div class="card-title">Apoio à Decisão</div>
+            <p class="card-desc">Geração de resumos e sinalização de processos que exigem parecer especial da Direção de Crédito.</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem; background: rgba(2, 132, 199, 0.08); border-left: 4px solid var(--accent-blue); padding: 1.1rem 1.6rem; border-radius: 8px; font-size: 0.92rem; color: var(--text-primary);">
+          <strong>Roteiro Estratégico:</strong> Capacidades desenhadas para apoiar a supervisão das operações sem acrescentar burocracia aos balcões.
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 10 — DE CHATBOT PARA COPILOTO        -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Roteiro de Evolução">
+        <div class="slide-header">
+          <div class="slide-tag">Maturidade do Produto</div>
+          <h2 class="slide-title">«Hoje responde. Amanhã pode antecipar.»</h2>
+          <p class="slide-subtitle">Evolução progressiva e modular que acompanha as necessidades da KixiCrédito mantendo a mesma interface simples: o WhatsApp.</p>
+        </div>
+
+        <div class="grid-4" style="margin-top: 1.8rem;">
+          <div class="card-modern" style="border-top: 4px solid var(--kixi-primary);">
+            <div style="font-family: var(--font-title); color: var(--kixi-primary); font-weight: 800; font-size: 0.85rem; margin-bottom: 0.4rem;">FASE 1</div>
+            <div class="card-title" style="font-size: 1.15rem;">ATENDIMENTO</div>
+            <p class="card-desc" style="font-size: 0.88rem; margin-top: 0.6rem;">
+              • Dúvidas 24/7<br>
+              • Catálogo de produtos<br>
+              • Encaminhamento a balcões
+            </p>
+            <div class="pill available" style="margin-top: 1.2rem;">Disponível</div>
+          </div>
+
+          <div class="card-modern" style="border-top: 4px solid var(--kixi-primary);">
+            <div style="font-family: var(--font-title); color: var(--kixi-primary); font-weight: 800; font-size: 0.85rem; margin-bottom: 0.4rem;">FASE 2</div>
+            <div class="card-title" style="font-size: 1.15rem;">CONHECIMENTO</div>
+            <p class="card-desc" style="font-size: 0.88rem; margin-top: 0.6rem;">
+              • FTIs oficiais integradas<br>
+              • Procedimentos internos<br>
+              • Perfis por número (RBAC)
+            </p>
+            <div class="pill available" style="margin-top: 1.2rem;">Disponível</div>
+          </div>
+
+          <div class="card-modern" style="border-top: 4px solid var(--kixi-primary);">
+            <div style="font-family: var(--font-title); color: var(--kixi-primary); font-weight: 800; font-size: 0.85rem; margin-bottom: 0.4rem;">FASE 3</div>
+            <div class="card-title" style="font-size: 1.15rem;">APOIO AO AGENTE</div>
+            <p class="card-desc" style="font-size: 0.88rem; margin-top: 0.6rem;">
+              • Checklist documental<br>
+              • Apoio à pré-análise<br>
+              • Guias de processo
+            </p>
+            <div class="pill available" style="margin-top: 1.2rem;">Disponível</div>
+          </div>
+
+          <div class="card-modern" style="border-top: 4px solid var(--accent-blue);">
+            <div style="font-family: var(--font-title); color: var(--accent-blue); font-weight: 800; font-size: 0.85rem; margin-bottom: 0.4rem;">FASE 4</div>
+            <div class="card-title" style="font-size: 1.15rem;">INTELIGÊNCIA</div>
+            <p class="card-desc" style="font-size: 0.88rem; margin-top: 0.6rem;">
+              • Insights operacionais<br>
+              • Tendências de procura<br>
+              • Apoio à supervisão
+            </p>
+            <div class="pill future" style="margin-top: 1.2rem;">Evolução</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem; text-align: center; color: var(--text-primary); font-weight: 600;">
+          «Uma solução que cresce com as prioridades estratégicas da KixiCrédito.»
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 11 — O VALOR PARA A KIXICREDITO       -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Valor Empresarial">
+        <div class="slide-header">
+          <div class="slide-tag">Impacto Global</div>
+          <h2 class="slide-title">«O valor está em toda a operação.»</h2>
+          <p class="slide-subtitle">Ganhos de eficiência e consistência distribuídos por todos os intervenientes da instituição.</p>
+        </div>
+
+        <div class="grid-4" style="margin-top: 1.6rem;">
+          <div class="card-modern highlight">
+            <div class="card-title" style="font-size: 1.15rem; color: var(--kixi-primary);">CLIENTE</div>
+            <ul class="executive-list" style="gap: 0.45rem; font-size: 0.86rem; color: var(--text-secondary);">
+              <li>➔ Respostas imediatas</li>
+              <li>➔ Orientação clara e simples</li>
+              <li>➔ Disponibilidade no WhatsApp</li>
+              <li>➔ Menos tempo de espera</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="card-title" style="font-size: 1.15rem; color: var(--kixi-primary);">AGENTE</div>
+            <ul class="executive-list" style="gap: 0.45rem; font-size: 0.86rem; color: var(--text-secondary);">
+              <li>➔ Acesso rápido às FTIs</li>
+              <li>➔ Apoio durante o atendimento</li>
+              <li>➔ Menos tempo de pesquisa</li>
+              <li>➔ Mais foco comercial</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight">
+            <div class="card-title" style="font-size: 1.15rem; color: var(--kixi-primary);">GESTOR</div>
+            <ul class="executive-list" style="gap: 0.45rem; font-size: 0.86rem; color: var(--text-secondary);">
+              <li>➔ Apoio à operação local</li>
+              <li>➔ Informação mais acessível</li>
+              <li>➔ Uniformização nacional</li>
+              <li>➔ Potencial analítico futuro</li>
+            </ul>
+          </div>
+
+          <div class="card-modern highlight" style="border-top-color: var(--kixi-primary-light);">
+            <div class="card-title" style="font-size: 1.15rem; color: var(--kixi-primary);">KIXICRÉDITO</div>
+            <ul class="executive-list" style="gap: 0.45rem; font-size: 0.86rem; color: var(--text-primary);">
+              <li>➔ Conhecimento centralizado</li>
+              <li>➔ Rigor e conformidade oficial</li>
+              <li>➔ Experiência digital moderna</li>
+              <li>➔ Base de inovação contínua</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SLIDE 12 — FECHO                           -->
+      <!-- ========================================== -->
+      <section class="slide" data-title="Fecho">
+        <div style="max-width: 960px; margin: 0 auto; text-align: center;">
+          <h1 style="font-family: var(--font-title); font-size: 4.2rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.08; margin-bottom: 0.9rem;">
+            KIXI <span style="color: var(--kixi-primary);">IA</span>
+          </h1>
+          <h2 style="font-family: var(--font-title); font-size: 1.75rem; font-weight: 600; color: #cbd5e1; margin-bottom: 2.2rem; line-height: 1.35;">
+            Mais do que um chatbot.<br>
+            <span style="color: var(--kixi-primary);">Um novo ponto de acesso à inteligência da KixiCrédito.</span>
+          </h2>
+
+          <div style="background: var(--bg-card); border: 1px solid var(--card-border-active); padding: 1.8rem 2.8rem; border-radius: 20px; box-shadow: var(--shadow-glow); margin-bottom: 2.5rem;">
+            <p style="font-size: 1.25rem; line-height: 1.6; color: var(--text-primary); font-weight: 500;">
+              «Do atendimento ao apoio operacional, o KIXI IA coloca o conhecimento certo no momento certo — através do canal que as pessoas já utilizam.»
+            </p>
+          </div>
+
+          <div style="font-family: var(--font-title); font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1.6rem;">
+            «Criado para a realidade da KixiCrédito. Preparado para crescer com o negócio.»
+          </div>
+
+          <div style="display: flex; justify-content: center; gap: 2rem; font-size: 0.95rem; color: var(--text-secondary);">
+            <span>💚 KixiCrédito S.A.</span>
+            <span>•</span>
+            <span>📱 WhatsApp Corporativo</span>
+            <span>•</span>
+            <span>🚀 Pronto para Validação</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <footer class="bottom-navbar">
+      <div class="progress-track">
+        <div id="progressBar" class="progress-fill"></div>
+      </div>
+      <div id="slideIndicator" class="slide-counter">01 / 12</div>
+      <div class="nav-btn-group">
+        <button id="btnPrev" class="btn-nav" disabled>
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+          Anterior
+        </button>
+        <button id="btnNext" class="btn-nav">
+          Seguinte
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const slides = document.querySelectorAll('.slide');
+      const progressBar = document.getElementById('progressBar');
+      const slideIndicator = document.getElementById('slideIndicator');
+      const btnPrev = document.getElementById('btnPrev');
+      const btnNext = document.getElementById('btnNext');
+      const btnTheme = document.getElementById('btnTheme');
+      const btnIndex = document.getElementById('btnIndex');
+      const btnFullscreen = document.getElementById('btnFullscreen');
+      
+      const drawer = document.getElementById('slideDrawer');
+      const btnDrawerClose = document.getElementById('btnDrawerClose');
+      const drawerList = document.getElementById('drawerList');
+      
+      let currentSlide = 0;
+      const totalSlides = slides.length;
+
+      // Popula o Índice do Drawer
+      slides.forEach((slide, idx) => {
+        const title = slide.getAttribute('data-title') || `Slide ${idx + 1}`;
+        const li = document.createElement('li');
+        li.className = `drawer-item ${idx === 0 ? 'active' : ''}`;
+        li.innerHTML = `<span class="drawer-num">${String(idx + 1).padStart(2, '0')}</span> <span>${title}</span>`;
+        li.addEventListener('click', () => {
+          goToSlide(idx);
+          drawer.classList.remove('open');
+        });
+        drawerList.appendChild(li);
+      });
+
+      function updateSlides() {
+        slides.forEach((slide, index) => {
+          if (index === currentSlide) {
+            slide.classList.add('active');
+          } else {
+            slide.classList.remove('active');
+          }
+        });
+
+        // Atualiza barra de progresso
+        const progressPercent = ((currentSlide + 1) / totalSlides) * 100;
+        if (progressBar) progressBar.style.width = `${progressPercent}%`;
+
+        // Atualiza contador
+        if (slideIndicator) {
+          slideIndicator.textContent = `${String(currentSlide + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+        }
+
+        // Atualiza botões
+        if (btnPrev) btnPrev.disabled = currentSlide === 0;
+        if (btnNext) {
+          if (currentSlide === totalSlides - 1) {
+            btnNext.innerHTML = 'Concluir <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+          } else {
+            btnNext.innerHTML = 'Seguinte <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>';
+          }
+        }
+
+        // Atualiza drawer active
+        const drawerItems = document.querySelectorAll('.drawer-item');
+        drawerItems.forEach((item, idx) => {
+          if (idx === currentSlide) {
+            item.classList.add('active');
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } else {
+            item.classList.remove('active');
+          }
+        });
+      }
+
+      function nextSlide() {
+        if (currentSlide < totalSlides - 1) {
+          currentSlide++;
+          updateSlides();
+        }
+      }
+
+      function prevSlide() {
+        if (currentSlide > 0) {
+          currentSlide--;
+          updateSlides();
+        }
+      }
+
+      function goToSlide(idx) {
+        if (idx >= 0 && idx < totalSlides) {
+          currentSlide = idx;
+          updateSlides();
+        }
+      }
+
+      // Eventos de clique
+      if (btnNext) btnNext.addEventListener('click', nextSlide);
+      if (btnPrev) btnPrev.addEventListener('click', prevSlide);
+
+      // Drawer Controls
+      if (btnIndex) btnIndex.addEventListener('click', () => drawer.classList.add('open'));
+      if (btnDrawerClose) btnDrawerClose.addEventListener('click', () => drawer.classList.remove('open'));
+
+      // Theme Switcher
+      if (btnTheme) {
+        btnTheme.addEventListener('click', () => {
+          document.body.classList.toggle('light-theme');
+        });
+      }
+
+      // Fullscreen Toggle
+      if (btnFullscreen) {
+        btnFullscreen.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+          }
+        });
+      }
+
+      // Navegação por Teclado
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+          nextSlide();
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          prevSlide();
+        } else if (e.key === 'Home') {
+          goToSlide(0);
+        } else if (e.key === 'End') {
+          goToSlide(totalSlides - 1);
+        } else if (e.key === 'f' || e.key === 'F') {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen();
+          }
+        } else if (e.key === 'Escape') {
+          drawer.classList.remove('open');
+        }
+      });
+
+      // Suporte a Touch / Swipe em dispositivos móveis
+      let touchStartX = 0;
+      let touchEndX = 0;
+
+      document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+      }, { passive: true });
+
+      document.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        const diff = touchStartX - touchEndX;
+        if (Math.abs(diff) > 50) {
+          if (diff > 0) nextSlide();
+          else prevSlide();
+        }
+      }, { passive: true });
+
+      // Inicialização
+      updateSlides();
+    });
+  </script>
+</body>
+</html>

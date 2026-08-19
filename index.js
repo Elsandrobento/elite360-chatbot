@@ -246,17 +246,151 @@ client.on('message', async (msg) => {
   if (!msg.body && !msg.hasMedia) return;
 
   const rawSender = msg.from;
-  const normalizedPhone = normalizePhone(rawSender);
-
-  // 1. Identificar utilizador na base de dados centralizada (RBAC)
-  const registeredUser = store.getUserByPhone(normalizedPhone);
-  const isStaff = isInternalStaff(registeredUser);
+  let contact = null;
+  try { contact = await msg.getContact(); } catch (e) {}
 
   let chat = null;
   try { chat = await msg.getChat(); } catch (e) {}
 
-  let contact = null;
-  try { contact = await msg.getContact(); } catch (e) {}
+  // Resolução multi-candidatos do telefone (suporta @c.us, @lid, contact.number, etc.)
+  const candidatePhones = [
+    rawSender,
+    contact?.number,
+    contact?.id?.user,
+    msg.author,
+    msg._data?.from,
+    msg._data?.author
+  ].filter(Boolean);
+
+  let registeredUser = null;
+  let normalizedPhone = normalizePhone(rawSender);
+
+  for (const candidate of candidatePhones) {
+    const norm = normalizePhone(candidate);
+    if (norm) {
+      const u = store.getUserByPhone(norm);
+      if (u) {
+        registeredUser = u;
+        normalizedPhone = norm;
+        break;
+      }
+    }
+  }
+
+  const isStaff = isInternalStaff(registeredUser);
+  const cleanBody = (msg.body || '').trim().toLowerCase();
+
+  // ============================================================
+  //  COMANDOS RÁPIDOS DE ALTERNÂNCIA DE MODO & TESTE (#agente, #gestor, #admin, #cliente)
+  // ============================================================
+  if (cleanBody === '#solene' || cleanBody === '#agente' || cleanBody === '!agente' || cleanBody === '#staff') {
+    const newStaff = store.addUserOrUpdate({
+      phone: normalizedPhone,
+      name: 'Solene Silva (Agente)',
+      role: ROLES.AGENT,
+      agency: 'Zango',
+      status: USER_STATUS.ACTIVE
+    });
+
+    const welcomeStaff =
+      `✅ *MODO KIXI COPILOT ATIVADO!*\n\n` +
+      `👤 *Utilizador:* ${newStaff.name}\n` +
+      `💼 *Função:* AGENT (Agente de Crédito)\n` +
+      `🏢 *Agência:* ${newStaff.agency}\n` +
+      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
+      `📌 *Funcionalidades Disponíveis:*\n` +
+      `• *Dúvidas Oficiais:* "Quais são os requisitos do KixiNegócio?"\n` +
+      `• *Checklist de Documentos:* "Verificar documentação" ou descreva os documentos recolhidos.\n` +
+      `• *Simulação Prévia:* "Cliente recebe 250.000 Kz e quer 500.000 Kz a 12 meses."\n` +
+      `• *Taxas e Prazos:* "Qual a taxa do KixiAgronegócio?"\n\n` +
+      `_Para voltar ao atendimento de cliente, envie #cliente._`;
+
+    await client.sendMessage(rawSender, welcomeStaff);
+    return;
+  }
+
+  if (cleanBody === '#filipe' || cleanBody === '#gestor' || cleanBody === '!gestor' || cleanBody === '#manager') {
+    const newManager = store.addUserOrUpdate({
+      phone: normalizedPhone,
+      name: 'Filipe Binza (Gestor)',
+      role: ROLES.MANAGER,
+      agency: 'Mutamba',
+      status: USER_STATUS.ACTIVE
+    });
+
+    const welcomeManager =
+      `✅ *MODO GESTOR DE AGÊNCIA ATIVADO!*\n\n` +
+      `👤 *Utilizador:* ${newManager.name}\n` +
+      `💼 *Função:* MANAGER (Gestor de Agência)\n` +
+      `🏢 *Agência:* ${newManager.agency}\n` +
+      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
+      `📊 *Funcionalidades de Gestão:*\n` +
+      `• *Resumo da Agência:* "Resumo operacional da agência"\n` +
+      `• *Dúvidas da Equipa:* "Quais as principais dúvidas dos agentes?"\n` +
+      `• *Processos:* "Quantos casos tiveram documentação incompleta?"\n\n` +
+      `_Para voltar ao atendimento de cliente, envie #cliente._`;
+
+    await client.sendMessage(rawSender, welcomeManager);
+    return;
+  }
+
+  if (cleanBody === '#tirso' || cleanBody === '#admin' || cleanBody === '!admin') {
+    const newAdmin = store.addUserOrUpdate({
+      phone: normalizedPhone,
+      name: 'Dr. Tirso (Administrador)',
+      role: ROLES.ADMIN,
+      agency: 'GLOBAL',
+      status: USER_STATUS.ACTIVE
+    });
+
+    const welcomeAdmin =
+      `✅ *MODO ADMINISTRADOR GLOBAL ATIVADO!*\n\n` +
+      `👤 *Utilizador:* ${newAdmin.name}\n` +
+      `💼 *Função:* ADMIN (Administrador Global)\n` +
+      `🏢 *Agência:* GLOBAL\n` +
+      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
+      `⚙️ *Ações Administrativas:*\n` +
+      `• *Visão Global:* "Relatório global de todas as agências"\n` +
+      `• *Utilizadores:* "Consultar utilizadores activos"\n` +
+      `• *Registo:* "Adicionar [Nome], [Telefone], [Função], [Agência]"\n\n` +
+      `_Para voltar ao atendimento de cliente, envie #cliente._`;
+
+    await client.sendMessage(rawSender, welcomeAdmin);
+    return;
+  }
+
+  if (cleanBody === '#cliente' || cleanBody === '#sair' || cleanBody === '#logout' || cleanBody === '!cliente') {
+    store.deleteUser(normalizedPhone);
+    const welcomeClient =
+      `👋 *MODO CLIENTE ATIVADO*\n\n` +
+      `Bem-vindo ao canal público de atendimento da *KixiCrédito S.A.*!\n\n` +
+      `Como podemos ajudar com o seu financiamento hoje?`;
+
+    await client.sendMessage(rawSender, welcomeClient);
+    return;
+  }
+
+  if (cleanBody === '#perfil' || cleanBody === '#status' || cleanBody === '#quem_sou') {
+    if (isStaff) {
+      await client.sendMessage(rawSender,
+        `👤 *PERFIL ATUAL — KIXI COPILOT*\n\n` +
+        `• *Nome:* ${registeredUser.name}\n` +
+        `• *Telefone:* ${formatPhoneForDisplay(registeredUser.phone)}\n` +
+        `• *Função:* ${registeredUser.role}\n` +
+        `• *Agência:* ${registeredUser.agency}\n` +
+        `• *Estado:* ${registeredUser.status}\n\n` +
+        `_Comandos rápidos: #agente, #gestor, #admin, #cliente_`
+      );
+    } else {
+      await client.sendMessage(rawSender,
+        `👤 *PERFIL ATUAL — CLIENTE*\n\n` +
+        `• *Telefone:* ${formatPhoneForDisplay(normalizedPhone)}\n` +
+        `• *Tipo de Acesso:* Público (Atendimento ao Cliente)\n\n` +
+        `_Para alternar para perfil interno, envie #agente, #gestor ou #admin._`
+      );
+    }
+    return;
+  }
 
   console.log(`\n📥 [MENSAGEM RECEBIDA] De: ${maskPhone(normalizedPhone)} | Tipo: ${msg.type} | Staff: ${isStaff ? `${registeredUser.role} (${registeredUser.name})` : 'CLIENT'}`);
 
@@ -494,6 +628,13 @@ app.get('/health', (req, res) => {
     ai: GEMINI_API_KEY ? 'configured' : 'missing_key',
     database: 'connected',
     registeredUsersCount: store.listUsers().length,
+    registeredUsers: store.listUsers().map(u => ({
+      name: u.name,
+      phone: maskPhone(u.phone),
+      role: u.role,
+      agency: u.agency,
+      status: u.status
+    })),
     activeClientSessions: getActiveClientSessionsCount(),
     qrCodeAvailable: !!qrCodeUrl,
     qrCodeUrl: qrCodeUrl || null,
@@ -505,6 +646,33 @@ app.get('/health', (req, res) => {
     },
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/users', (req, res) => {
+  res.json({
+    success: true,
+    total: store.listUsers().length,
+    users: store.listUsers()
+  });
+});
+
+app.post('/api/users/register', express.json(), (req, res) => {
+  try {
+    const { name, phone, role, agency } = req.body || {};
+    if (!name || !phone || !role) {
+      return res.status(400).json({ success: false, error: 'Campos obrigatórios: name, phone, role' });
+    }
+    const user = store.addUserOrUpdate({
+      name,
+      phone,
+      role: role.toUpperCase(),
+      agency: agency || 'Geral',
+      status: USER_STATUS.ACTIVE
+    });
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Tratamento de erros globais
