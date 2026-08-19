@@ -3,10 +3,17 @@ import express from 'express';
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+
+// Módulos do Sistema KIXI IA + KIXI COPILOT
+import { normalizePhone, formatPhoneForDisplay } from './src/auth/phoneNormalizer.js';
+import { isInternalStaff, ROLES } from './src/auth/rbac.js';
+import { store } from './src/database/store.js';
+import { seedInitialUsers } from './src/database/seed.js';
+import { handleCopilotMessage } from './src/copilot/copilotHandler.js';
+import { handleClientMessage, getActiveClientSessionsCount } from './src/client/clientHandler.js';
+import { logger, maskPhone } from './src/logger/logger.js';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -17,11 +24,11 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'SUA_CHAVE_API_AQUI') {
   process.exit(1);
 }
 
-// Inicializar API do Gemini
-const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Inicializar utilizadores autorizados na base de dados
+seedInitialUsers();
 
-
-//  MONITOR FORENSE DE PROCESSOS (Tabela PID | PPID | RSS | TYPE)
+// ============================================================
+//  MONITOR FORENSE DE PROCESSOS (VPS LINUX)
 // ============================================================
 function logProcessTreeMemory(label) {
   const m = process.memoryUsage();
@@ -34,7 +41,6 @@ function logProcessTreeMemory(label) {
       const lines = output.trim().split('\n').slice(1);
       let chromiumRssTotalKb = 0;
       let chromiumCount = 0;
-      let maxChromiumProcessKb = 0;
       const processDetails = [];
 
       for (const line of lines) {
@@ -51,13 +57,10 @@ function logProcessTreeMemory(label) {
           const rssMb = rssKb / 1024;
           chromiumRssTotalKb += rssMb;
           chromiumCount++;
-          if (rssMb > maxChromiumProcessKb) maxChromiumProcessKb = rssMb;
-
           let type = 'Chromium Helper';
           if (cmd.includes('--type=renderer')) type = 'Chromium Renderer';
           else if (cmd.includes('--type=gpu-process')) type = 'Chromium GPU';
           else if (cmd.includes('--type=utility')) type = 'Chromium Utility';
-          else if (cmd.includes('--type=zygote')) type = 'Chromium Zygote';
           else type = 'Chromium Browser (Main)';
 
           processDetails.push(`  PID: ${pid.padEnd(6)} | PPID: ${ppid.padEnd(6)} | RSS: ${rssMb.toFixed(1).padStart(6)} MB | ${type}`);
@@ -68,33 +71,28 @@ function logProcessTreeMemory(label) {
       const treeTotalMb = (parseFloat(nodeRssMb) + parseFloat(chromTotalMb)).toFixed(1);
 
       console.log(`\n==================================================`);
-      console.log(`[PROCESS_TREE_DETAIL] ${label} | TOTAL TREE RSS: ${treeTotalMb} MB (Limit: 512 MB)`);
+      console.log(`[PROCESS_TREE] ${label} | TOTAL TREE RSS: ${treeTotalMb} MB (Limit: 512 MB)`);
       console.log(`Node RSS: ${nodeRssMb} MB (Heap: ${nodeHeapMb} MB) | Chromium RSS: ${chromTotalMb} MB (${chromiumCount} procs)`);
       console.log(`--------------------------------------------------`);
-      processDetails.slice(0, 12).forEach(d => console.log(d));
+      processDetails.slice(0, 8).forEach(d => console.log(d));
       console.log(`==================================================\n`);
       return;
     } catch (e) {
-      // Se ps falhar, cai para o formato padrao
+      // Fallback
     }
   }
 
-  console.log(
-    `[PROCESS_MEMORY] ${label} | NODE RSS=${nodeRssMb}MB | HEAP=${nodeHeapMb}MB` +
-    ` EXT=${(m.external / 1024 / 1024).toFixed(1)}MB`
-  );
+  console.log(`[PROCESS_MEMORY] ${label} | NODE RSS=${nodeRssMb}MB | HEAP=${nodeHeapMb}MB`);
 }
 
 function logMemory(label) {
   logProcessTreeMemory(label);
 }
 
-// ============================================================
-//  MONITOR PERIÓDICO DE ÁRVORE DE PROCESSOS (a cada 15 segundos)
-// ============================================================
+// Monitor periódico da árvore de processos (a cada 30 segundos)
 setInterval(() => {
   logProcessTreeMemory('PERIODIC_MONITOR');
-}, 15000).unref();
+}, 30000).unref();
 
 // ============================================================
 //  ESTADO DA APLICAÇÃO
@@ -103,271 +101,24 @@ let whatsappStatus = 'initializing';
 let qrCodeUrl = null;
 let lastError = null;
 
-// Deduplicação: regista IDs de mensagens já processadas para evitar duplicados
-// O Set é limpo a cada hora para não crescer indefinidamente
 const processedMessageIds = new Set();
 setInterval(() => processedMessageIds.clear(), 60 * 60 * 1000).unref();
 
-
-// ============================================================
-//  BASE DE CONHECIMENTO - KIXICRÉDITO
-//  Carregada UMA única vez em memória estática (string constante)
-// ============================================================
-const KNOWLEDGE_BASE = `
-INSTITUIÇÃO: KixiCrédito S.A.
-Endereço: Largo Teixeira de Pascoaes, Vila Alice, Luanda, Angola
-Linha de Atendimento: +244 930 968 888
-E-mail: atendimento@kixicredito.ao
-Website: www.kixicredito.ao
-Redes Sociais: Facebook, LinkedIn e Instagram (@kixicredito_oficial)
-
-QUEM SOMOS:
-A KixiCrédito é uma instituição financeira não bancária dedicada à promoção da inclusão financeira e ao desenvolvimento do empreendedorismo em Angola. Fundada em 1996 com um projeto de microcrédito pela Development Workshop Angola (DWA). Em 2008 tornou-se a primeira sociedade de microcrédito licenciada pelo Banco Nacional de Angola (BNA). Com mais de 20 anos de experiência, apoia milhares de empreendedores, famílias e pequenos negócios com soluções financeiras responsáveis. Presente em diversas províncias de Angola.
-Slogan: "Há mais de 20 anos a KixiCrédito anda com quem levanta cedo e faz acontecer."
-
----
-
-PRODUTO 1: KixiFácil
-Tipo: Crédito Empresarial - Nano e Micro Empresarial
-Público-alvo: Nano e micro empresários
-Montante Mínimo: Kz 5.000,00
-Montante Máximo: Kz 500.000,00
-Prazo máximo: 12 meses
-Periodicidade de pagamento: Mensal
-Taxa de Juro Nominal Anual (TAN): 55,2% | Taxa mensal: 4,6% a.m.
-Garantias exigidas: Solidária, avalista e penhor
-Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
-Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
-Taxa de juro de mora: 5% sobre o valor da prestação em mora
-Falta de pagamento: Não renovação automática para reempréstimo
-Validade da FTI: 90 dias
-
----
-
-PRODUTO 2: KixiNegócio
-Tipo: Crédito Empresarial - Empreendedorismo
-Público-alvo: Empreendedores e pequenos negócios
-Montante Mínimo: Kz 500.001,00
-Montante Máximo: Kz 2.500.000,00
-Prazo máximo: 18 meses
-Periodicidade de pagamento: Mensal
-Taxa de Juro Nominal Anual (TAN): 55,2% | Taxa mensal: 4,6% a.m.
-Garantias exigidas: Avalista, hipoteca, penhor e caução
-Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
-Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
-Taxa de juro de mora: 5% sobre o valor da prestação em mora
-Falta de pagamento: Sem elegibilidade para novo empréstimo
-Validade da FTI: 90 dias
-
----
-
-PRODUTO 3: KixiAgronegócio
-Tipo: Crédito para Agricultura e Pecuária
-Público-alvo: Nano, micro e pequenos agricultores
-Montante Mínimo: Kz 50.000,00
-Montante Máximo: Kz 2.500.000,00
-Prazo máximo: 18 meses
-Periodicidade de pagamento: Mensal ou Quadrimestral
-Taxa de Juro Nominal Anual (TAN): 55,2% | Taxa mensal: 4,6% a.m.
-Garantias exigidas: Avalista, hipoteca, penhor e caução
-Reembolso antecipado: 4% do capital (aviso prévio mínimo de 15 dias)
-Encargos adicionais: Comissão de processamento (6,5%) + Imprevistos (2%)
-Taxa de juro de mora: 5% sobre o valor da prestação em mora
-Falta de pagamento: Sem elegibilidade para novo empréstimo
-Periodicidade especial: Opção de pagamento quadrimestral para ciclos agrícolas
-Validade da FTI: 90 dias
-
----
-
-PRODUTO 4: KixiValor
-Tipo: Adiantamento de Salário - Crédito a Médio Longo Prazo
-Público-alvo: Trabalhadores assalariados (colaboradores de empresas parceiras)
-Montante Mínimo: Kz 75.000,00
-Montante Máximo: Kz 2.500.000,00
-Prazo máximo: 18 meses
-Periodicidade de pagamento: Mensal
-Taxa de Juro Nominal Anual (TAN): 61,2%
-Garantias: Não aplicável (garantia implícita pelo vínculo laboral)
-Reembolso antecipado: 3% do valor em dívida
-Taxa de juro de mora: 50% sobre a prestação mensal convencionada
-Multa diária por incumprimento: 1% sobre o valor vencido
-Consequências de incumprimento: Comunicação à Central de Informação e Risco de Crédito do BNA
-Validade da FTI: 90 dias
-
----
-
-PARCERIAS KIXICRÉDITO:
-Destinatários: Entidades empregadoras que queiram oferecer crédito aos seus colaboradores
-Requisitos: Protocolo celebrado com a entidade empregadora; Documento de identificação válido; Extracto bancário
-
-Processo de Adesão:
-1º Passo: Celebração do protocolo de parceria
-2º Passo: O colaborador apresenta o pedido de crédito
-3º Passo: Entrega da documentação necessária
-4º Passo: Análise e decisão sobre o pedido
-5º Passo: Assinatura do contrato
-6º Passo: Desembolso do montante aprovado
-
-Para se tornar parceiro: +244 930 968 888 ou atendimento@kixicredito.ao
-
----
-
-INFORMAÇÕES GERAIS:
-- Direito de revogação: A qualquer momento, sem custos, antes da concessão do financiamento
-- Rejeição do pedido: O cliente é informado de imediato após a rejeição
-- Cópia do contrato: Entregue após celebração (gratuita)
-- Todos os produtos válidos por 90 dias a partir da data da FTI
-`;
-
-// ============================================================
-//  PROMPT MESTRE DA KIXI IA
-//  Construído UMA vez em memória (string constante, não recriada por pedido)
-// ============================================================
-const SYSTEM_INSTRUCTION = `
-ÉS A KIXI IA — assistente virtual da KixiCrédito S.A., a maior instituição de microcrédito de Angola (desde 1996).
-
-REGRAS ABSOLUTAS — NUNCA QUEBRAR:
-1. MENSAGENS CURTAS: Máximo 4 linhas por resposta. NUNCA escreves paredes de texto.
-2. UMA COISA DE CADA VEZ: Dás uma informação e perguntas se quer saber mais. Nunca despejares tudo de uma vez.
-3. TOM HUMANO: Escreves como uma pessoa real no WhatsApp. Caloroso, próximo, natural.
-4. EMOJIS COM MODERAÇÃO: 1-2 emojis por mensagem, no máximo.
-5. NUNCA FAZES LISTAS LONGAS: No máximo 3 itens por mensagem.
-6. PORTUGUÊS DE ANGOLA: Natural, sem jargão técnico financeiro.
-7. NUNCA INVENTAS: Se não souberes, dizes para ligar ao +244 930 968 888.
-
-EXEMPLOS DE COMO DEVES RESPONDER:
-
-❌ ERRADO (demasiado longo):
-"Olá! Bem-vindo à KixiCrédito! Temos o KixiFácil com Kz 5.000 a 500.000 a 12 meses a 4,6% ao mês, o KixiNegócio com Kz 500.001 a 2.500.000 a 18 meses, o KixiAgronegócio para agricultores, e o KixiValor para assalariados..."
-
-✅ CORRETO (curto e humano):
-"Olá! 👋 Bem-vindo à KixiCrédito! Sou a Kixi IA. O que posso fazer por si hoje?"
-
-❌ ERRADO:
-"Para o KixiFácil precisa de: avalista, caução ou penhor, comissão de processamento de 6,5%, imprevistos de 2%, taxa de mora de 5%..."
-
-✅ CORRETO:
-"O *KixiFácil* é perfeito para o seu negócio! 💼 Pode pedir de Kz 5.000 até Kz 500.000, em até 12 meses. Quer saber mais detalhes?"
-
-BASE DE CONHECIMENTO:
-${KNOWLEDGE_BASE}
-
-FLUXO:
-- Primeira mensagem: saudação curta + "Como posso ajudar?"
-- Qualificação: UMA pergunta de cada vez (tem negócio próprio? / que montante precisa? / qual o prazo?)
-- Produto sugerido: 3-4 linhas com os pontos principais + pergunta de seguimento
-- Pedido de crédito: recolhe dados um a um (nome → atividade → montante → prazo)
-- Contacto humano: "Ligue para 📞 +244 930 968 888 ou escreva para atendimento@kixicredito.ao 😊"
-
-EXTRAÇÃO DE LEADS (invisível para o cliente):
-Quando tiveres nome + atividade + montante, inclui NO FINAL:
-###LEAD_DATA###{"nome": "Nome", "atividade": "Atividade", "produto_interesse": "Produto", "montante": "Montante", "telefone": ""}###
-`;
-
-// ============================================================
-//  CONFIGURAÇÕES DO SISTEMA
-// ============================================================
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
-// Mantém últimas 10 mensagens de histórico (5 turnos user+bot)
-const MAX_HISTORY_MESSAGES = 10;
-// Máximo de sessões ativas simultâneas
-const MAX_ACTIVE_SESSIONS = 200;
 const MANAGER_NUMBER = process.env.MANAGER_NUMBER || '244930968888@c.us';
-const LEADS_FILE = path.join(process.cwd(), 'kixi_leads.json');
 const SESSION_PATH = process.env.SESSION_PATH || './';
-const sessions = new Map();
 
 // ============================================================
-//  HELPER: Converter histórico Gemini pesado em pares de texto leve
-//  O chatSession.getHistory() devolve objetos grandes com candidates,
-//  safety ratings, metadados, etc. Guardamos apenas role + texto.
-// ============================================================
-function compressHistory(rawHistory) {
-  return rawHistory.map(entry => ({
-    role: entry.role,
-    parts: [{ text: (entry.parts || []).map(p => p.text || '').join('') }]
-  }));
-}
-
-// ============================================================
-//  LIMPEZA PERIÓDICA DE SESSÕES EXPIRADAS
-//  Sem isto, sessions cresce indefinidamente em memória
-//  pois entradas antigas nunca são removidas.
-// ============================================================
-setInterval(() => {
-  const now = Date.now();
-  let removed = 0;
-  for (const [userId, sessionData] of sessions.entries()) {
-    if (now - sessionData.lastActive > SESSION_TIMEOUT) {
-      sessions.delete(userId);
-      removed++;
-    }
-  }
-  if (removed > 0) {
-    console.log(`[SESSION_GC] Removed ${removed} expired session(s). Active sessions: ${sessions.size}`);
-  }
-}, 5 * 60 * 1000).unref(); // Executa a cada 5 minutos
-
-// ============================================================
-//  FUNÇÕES AUXILIARES
-// ============================================================
-async function retryWithBackoff(fn, retries = 3, delay = 1000) {
-  try {
-    return await fn();
-  } catch (error) {
-    if (retries <= 0) throw error;
-    console.warn(`⚠️ Erro na API. Tentativas restantes: ${retries}. A tentar em ${delay}ms... Erro: ${error.message || error}`);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return retryWithBackoff(fn, retries - 1, delay * 2);
-  }
-}
-
-function salvarLead(leadData) {
-  try {
-    let leads = [];
-    if (fs.existsSync(LEADS_FILE)) {
-      const content = fs.readFileSync(LEADS_FILE, 'utf-8');
-      if (content.trim()) leads = JSON.parse(content);
-    }
-    const jaExiste = leads.some(l =>
-      l.telefone === leadData.telefone &&
-      l.nome?.toLowerCase() === leadData.nome?.toLowerCase()
-    );
-    if (!jaExiste) {
-      leadData.dataRegisto = new Date().toISOString();
-      leads.push(leadData);
-      fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
-      console.log(`\n🚨 [LEAD CAPTURADO] "${leadData.nome}" guardado em kixi_leads.json!`);
-      const managerMsg =
-        `🚨 *NOVO LEAD KIXI IA* 🚨\n\n` +
-        `👤 *Nome:* ${leadData.nome || 'N/D'}\n` +
-        `💼 *Atividade:* ${leadData.atividade || 'N/D'}\n` +
-        `💰 *Produto Interesse:* ${leadData.produto_interesse || 'N/D'}\n` +
-        `📊 *Montante Pretendido:* ${leadData.montante || 'N/D'}\n` +
-        `📱 *Contacto:* wa.me/${leadData.telefone || ''}`;
-      client.sendMessage(MANAGER_NUMBER, managerMsg)
-        .then(() => console.log(`✉️ Notificação enviada ao gestor.`))
-        .catch(err => console.error(`❌ Erro ao notificar gestor:`, err));
-    }
-  } catch (error) {
-    console.error('❌ Erro ao salvar lead:', error);
-  }
-}
-
-// ============================================================
-//  CONFIGURAÇÃO DO PUPPETEER — HEADLESS LINUX (VPS)
-//  Flags essenciais para correr em servidor Linux sem interface gráfica.
-//  NÃO aplicamos limites de RAM artificiais pois a VPS tem memória suficiente.
+//  CONFIGURAÇÃO DO PUPPETEER — HEADLESS LINUX (VPS HOSTINGER)
 // ============================================================
 const puppeteerArgs = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
-  '--disable-dev-shm-usage',         // Usa /tmp em vez de /dev/shm (compatível com VPS)
+  '--disable-dev-shm-usage',
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
   '--no-default-browser-check',
   '--no-zygote',
-  '--disable-gpu',                   // Sem GPU no servidor headless
+  '--disable-gpu',
   '--disable-software-rasterizer',
   '--mute-audio',
   '--disable-extensions',
@@ -379,7 +130,7 @@ const puppeteerArgs = [
   '--disable-default-apps',
   '--disable-sync',
   '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter',
-  '--disk-cache-size=33554432',      // Cache 32 MB (razoável para VPS)
+  '--disk-cache-size=33554432',
   '--media-cache-size=1'
 ];
 
@@ -388,14 +139,13 @@ const puppeteerConfig = {
   args: puppeteerArgs
 };
 
-// Caminho personalizado do Chromium (quando definido via variável de ambiente)
 if (process.env.PUPPETEER_EXECUTABLE_PATH) {
   console.log(`[PUPPETEER] executablePath: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
   puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 }
 
 // ============================================================
-//  CLIENTE WHATSAPP — ÚNICA INSTÂNCIA (nunca recriada)
+//  CLIENTE WHATSAPP — INSTÂNCIA ÚNICA PERSISTENTE
 // ============================================================
 console.log('[WA] CLIENT CREATED');
 
@@ -403,8 +153,6 @@ const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'kixi-ia', dataPath: SESSION_PATH }),
   takeoverOnConflict: true,
   takeoverTimeoutMs: 0,
-  // webVersionCache: usa versão estável 2.2412.54 para evitar o bug de sincronização
-  // de histórico suspensa que ocorria com a versão alpha
   webVersionCache: {
     type: 'remote',
     remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -415,7 +163,7 @@ const client = new Client({
 client.on('qr', (qr) => {
   whatsappStatus = 'qr_ready';
   qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-  console.log('\n[WA] QR GENERATED');
+  console.log('\n[WA] QR CODE GERADO');
   qrcode.generate(qr, { small: true });
   console.log(`[WA] QR Link: ${qrCodeUrl}\n`);
   logProcessTreeMemory('QR GENERATED');
@@ -424,336 +172,183 @@ client.on('qr', (qr) => {
 client.on('authenticated', async () => {
   whatsappStatus = 'authenticated';
   qrCodeUrl = null;
-  console.log('\n[WA] QR SCANNED & AUTHENTICATED');
+  console.log('\n[WA] QR CODE LIDO E AUTENTICADO COM SUCESSO');
   logProcessTreeMemory('AUTHENTICATED');
   try {
     const state = await client.getState();
-    console.log(`[WA] STATE AFTER AUTHENTICATION: ${state}`);
+    console.log(`[WA] STATE APÓS AUTH: ${state}`);
   } catch (err) {
-    console.warn(`[WA] Could not fetch state after auth: ${err.message || err}`);
+    console.warn(`[WA] Erro ao obter estado após auth: ${err.message || err}`);
   }
 });
 
 client.on('loading_screen', (percent, message) => {
   whatsappStatus = 'loading';
-  console.log(`[WA] LOADING: ${percent}% - ${message}`);
-  logProcessTreeMemory(`LOADING_${percent}%`);
+  console.log(`[WA] SINCRONIZAÇÃO: ${percent}% - ${message}`);
 });
 
 client.on('change_state', (state) => {
-  console.log(`[WA] STATE CHANGED: ${state}`);
+  console.log(`[WA] ESTADO ALTERADO: ${state}`);
 });
 
 client.on('auth_failure', (msg) => {
   whatsappStatus = 'auth_failure';
   lastError = `Auth failure: ${msg}`;
-  console.error('❌ [WA] AUTH FAILURE:', msg);
-  logProcessTreeMemory('AUTH_FAILURE');
+  console.error('❌ [WA] FALHA NA AUTENTICAÇÃO:', msg);
 });
 
 client.on('ready', async () => {
   whatsappStatus = 'ready';
   qrCodeUrl = null;
-  console.log('\n🚀 [WA] READY! KixiCrédito Kixi IA online.');
-  console.log('💚 KixiCrédito S.A. | +244 930 968 888 | atendimento@kixicredito.ao');
+  console.log('\n🚀 [WA] READY! KixiCrédito Kixi IA + Copilot ONLINE.');
+  console.log('💚 KixiCrédito S.A. | Atendimento e Copilot Ativos');
   logProcessTreeMemory('READY');
-
-  // Diagnóstico de erro de página Puppeteer
-  try {
-    if (client.pupBrowser) {
-      client.pupBrowser.on('disconnected', () => {
-        console.error('❌ [PUPPETEER] BROWSER DISCONNECTED — O processo Chromium foi desconectado ou encerrado.');
-        logProcessTreeMemory('BROWSER_DISCONNECTED');
-      });
-    }
-    if (client.pupPage) {
-      client.pupPage.on('error', (err) => console.error('❌ [PUPPETEER PAGE ERROR]:', err.message || err));
-      client.pupPage.on('pageerror', (err) => console.error('❌ [PUPPETEER PAGE UNCAUGHT EXCEPTION]:', err.message || err));
-    }
-  } catch (diagErr) {}
 
   try {
     const state = await client.getState();
     const info = client.info;
-    const maskedUser = info?.wid?.user ? (info.wid.user.substring(0, 4) + '***' + info.wid.user.slice(-2)) : 'N/A';
-    console.log(`[WA] OPERATIONAL STATE: ${state}`);
-    console.log(`[WA] CLIENT INFO: Pushname="${info?.pushname || 'N/A'}", WID=${maskedUser}, Platform=${info?.platform || 'N/A'}`);
+    const maskedUser = info?.wid?.user ? maskPhone(info.wid.user) : 'N/A';
+    console.log(`[WA] ESTADO OPERACIONAL: ${state} | WID: ${maskedUser}`);
   } catch (err) {
-    console.warn(`[WA] Could not fetch operational state info: ${err.message || err}`);
+    console.warn(`[WA] Aviso ao ler info: ${err.message || err}`);
   }
 });
 
 client.on('disconnected', (reason) => {
   whatsappStatus = 'disconnected';
   lastError = `Disconnected: ${reason}`;
-  console.error('❌ [WA] DISCONNECTED:', reason);
-  logMemory('[MEMORY] DISCONNECTED');
-  console.warn('⚠️ [WA] Serviço HTTP mantém-se ativo. Reiniciar o serviço no Render para reconectar.');
+  console.error('❌ [WA] DESCONECTADO:', reason);
 });
 
-// MONITOR DE ESTADO DO WHATSAPP (a cada 20 segundos)
-setInterval(async () => {
-  if (whatsappStatus === 'authenticated' || whatsappStatus === 'ready' || whatsappStatus === 'loading') {
-    try {
-      const state = await client.getState();
-      console.log(`[WA] PERIODIC CHECK | Status: ${whatsappStatus} | State: ${state} | Pushname: ${client.info?.pushname || 'N/A'}`);
-    } catch (e) {
-      console.log(`[WA] PERIODIC CHECK | Status: ${whatsappStatus} | Error getting state: ${e.message}`);
-    }
-  }
-}, 20000).unref();
-
 // ============================================================
-//  PROCESSAMENTO DE MENSAGENS DO WHATSAPP
+//  PROCESSAMENTO PRINCIPAL DE MENSAGENS (ROTEAMENTO INTELIGENTE)
 // ============================================================
 client.on('message', async (msg) => {
-  // Deduplicação: ignorar mensagens já processadas (previne duplicados em reconexão/replay)
-  let msgId;
-  if (typeof msg.id === 'string') {
-    msgId = msg.id;
-  } else if (msg.id && typeof msg.id === 'object') {
-    msgId = msg.id._serialized || msg.id.id || JSON.stringify(msg.id);
-  } else {
-    msgId = String(Date.now()); // Fallback extremo
-  }
-  
-  if (processedMessageIds.has(msgId)) {
-    console.log(`[WHATSAPP] Message ignored: Duplicate (${msgId})`);
-    return;
-  }
+  let msgId = typeof msg.id === 'string' ? msg.id : (msg.id?._serialized || msg.id?.id || String(Date.now()));
+
+  if (processedMessageIds.has(msgId)) return;
   processedMessageIds.add(msgId);
 
-  // Ignorar mensagens do próprio bot
   if (msg.fromMe) return;
-
-  console.log(`\n📥 [WHATSAPP] Message event received`);
-  console.log(`[WHATSAPP] From: ${msg.from}`);
-  console.log(`[WHATSAPP] Message type: ${msg.type}`);
-  console.log(`[WHATSAPP] Body: "${msg.body || ''}"`);
 
   const isGroup = msg.from.endsWith('@g.us');
   const isBroadcast = msg.from === 'status@broadcast';
+  if (isGroup || isBroadcast) return;
 
-  if (isGroup) {
-    console.log(`[WHATSAPP] Message ignored: Group message (${msg.from})`);
-    return;
-  }
-
-  if (isBroadcast) {
-    console.log(`[WHATSAPP] Message ignored: Status broadcast`);
-    return;
-  }
-
-  // Filtrar mensagens muito antigas (> 5 minutos)
+  // Filtrar mensagens com mais de 5 minutos
   const nowInSeconds = Math.floor(Date.now() / 1000);
-  const messageAge = nowInSeconds - msg.timestamp;
-  if (messageAge > 300) {
-    console.log(`[WHATSAPP] Message ignored: Old message (${messageAge}s old)`);
-    return;
-  }
+  if (nowInSeconds - msg.timestamp > 300) return;
 
   // Filtrar stickers
-  if (msg.hasMedia && msg.type === 'sticker') {
-    console.log(`[WHATSAPP] Message ignored: Sticker`);
-    return;
-  }
+  if (msg.hasMedia && msg.type === 'sticker') return;
 
-  // Ignorar mensagens sem corpo nem mídia
-  if (!msg.body && !msg.hasMedia) {
-    console.log(`[WHATSAPP] Message ignored: Empty body`);
-    return;
-  }
+  // Filtrar mensagens vazias
+  if (!msg.body && !msg.hasMedia) return;
 
-  console.log(`[WHATSAPP] Passed message filters`);
+  const rawSender = msg.from;
+  const normalizedPhone = normalizePhone(rawSender);
 
-  const userId = msg.from;
+  // 1. Identificar utilizador na base de dados centralizada (RBAC)
+  const registeredUser = store.getUserByPhone(normalizedPhone);
+  const isStaff = isInternalStaff(registeredUser);
+
   let chat = null;
-  try {
-    chat = await msg.getChat();
-  } catch (err) {
-    console.warn(`[WHATSAPP] Warning: Could not get chat object for [${userId}]:`, err.message || err);
-  }
+  try { chat = await msg.getChat(); } catch (e) {}
 
   let contact = null;
-  try {
-    contact = await msg.getContact();
-  } catch (err) {
-    console.warn(`[WHATSAPP] Warning: Could not get contact object for [${userId}]:`, err.message || err);
-  }
+  try { contact = await msg.getContact(); } catch (e) {}
 
-  // Processar documentos e imagens como comprovativos
-  if (msg.hasMedia && (msg.type === 'image' || msg.type === 'document')) {
-    console.log(`📸 [WHATSAPP] Document/image received from [${userId}]`);
-    try { await chat?.sendStateTyping(); } catch (e) {}
-    try {
-      const sessionData = sessions.get(userId);
-      const clientName = (sessionData && sessionData.clientName)
-        ? sessionData.clientName
-        : (contact?.pushname || contact?.name || 'Cliente');
-      const notifyMsg =
-        `📄 *DOCUMENTO RECEBIDO - KIXI IA*\n\n` +
-        `👤 *Cliente:* ${clientName}\n` +
-        `📱 *Contacto:* wa.me/${contact?.id?.user || userId.split('@')[0]}\n\nDocumento em anexo:`;
-
-      console.log(`[WHATSAPP] Forwarding document to manager...`);
-      await client.sendMessage(MANAGER_NUMBER, notifyMsg);
-      await msg.forward(MANAGER_NUMBER);
-      
-      console.log(`[WHATSAPP] Sending confirmation to client...`);
-      await client.sendMessage(userId,
-        `Recebemos o seu documento! 📋\n\nA nossa equipa irá analisar e entrará em contacto brevemente.\n\n📞 Apoio imediato: *+244 930 968 888*`
-      );
-      console.log(`[WHATSAPP] Document processed successfully`);
-    } catch (err) {
-      console.error('❌ [WHATSAPP] Erro ao processar documento:', err.message || err);
-      await client.sendMessage(userId, 'Recebemos o ficheiro, mas houve um problema ao encaminhá-lo. Contacte-nos pelo *+244 930 968 888*.');
-    } finally {
-      try { await chat?.clearState(); } catch (e) {}
-    }
-    return;
-  }
-
-  const userMessage = msg.body;
-  console.log(`[AI] Starting KixiCredito processing`);
-  try { await chat?.sendStateTyping(); } catch (e) {}
+  console.log(`\n📥 [MENSAGEM RECEBIDA] De: ${maskPhone(normalizedPhone)} | Tipo: ${msg.type} | Staff: ${isStaff ? `${registeredUser.role} (${registeredUser.name})` : 'CLIENT'}`);
 
   try {
-    const now = Date.now();
-    let sessionData = sessions.get(userId);
+    let replyText = null;
 
-    if (!sessionData || (now - sessionData.lastActive > SESSION_TIMEOUT)) {
-      sessionData = { history: [], lastActive: now, clientName: null };
-      sessions.set(userId, sessionData);
-    }
-    sessionData.lastActive = now;
+    if (isStaff) {
+      // ==========================================
+      //  FLUXO KIXI COPILOT (AGENT / MANAGER / ADMIN)
+      // ==========================================
+      console.log(`👨‍💼 [COPILOT] A processar pedido interno de ${registeredUser.name} (${registeredUser.role} - ${registeredUser.agency})`);
+      try { await chat?.sendStateTyping(); } catch (e) {}
 
-    // Cap de sessões ativas: se Map tiver demasiadas entradas, remove as mais antigas
-    if (sessions.size > MAX_ACTIVE_SESSIONS) {
-      let oldest = null;
-      let oldestTime = Infinity;
-      for (const [uid, sd] of sessions.entries()) {
-        if (sd.lastActive < oldestTime) { oldestTime = sd.lastActive; oldest = uid; }
-      }
-      if (oldest && oldest !== userId) {
-        sessions.delete(oldest);
-        console.log(`[SESSION_GC] Cap reached (${MAX_ACTIVE_SESSIONS}). Evicted oldest session.`);
-      }
-    }
+      replyText = await handleCopilotMessage(registeredUser, msg.body, msg.hasMedia);
 
-    // Prune do histórico — mantém apenas as últimas MAX_HISTORY_MESSAGES mensagens
-    if (sessionData.history.length > MAX_HISTORY_MESSAGES) {
-      const extra = sessionData.history.length - MAX_HISTORY_MESSAGES;
-      const toRemove = extra % 2 === 0 ? extra : extra + 1;
-      sessionData.history = sessionData.history.slice(toRemove);
-      console.log(`✂️ [AI] History pruned: ${sessionData.history.length} msgs remaining for [${userId}]`);
-    }
-
-    // Modelos Gemini activos (Junho 2025)
-    const primaryModelName = 'gemini-2.5-flash';
-    const fallbackModelName = 'gemini-2.5-flash-lite';
-
-    // Log do tamanho do prompt para diagnóstico de memória
-    const historyChars = JSON.stringify(sessionData.history).length;
-    console.log(`[AI] System prompt chars: ${SYSTEM_INSTRUCTION.length}`);
-    console.log(`[AI] History chars: ${historyChars} (${sessionData.history.length} msgs)`);
-    console.log(`[AI] User message chars: ${userMessage.length}`);
-    console.log(`[AI] Total approx chars: ${SYSTEM_INSTRUCTION.length + historyChars + userMessage.length}`);
-    console.log(`[AI] Calling Gemini (Model: ${primaryModelName})`);
-    
-    let botResponse = null;
-    try {
-      const model = ai.getGenerativeModel({
-        model: primaryModelName,
-        systemInstruction: SYSTEM_INSTRUCTION
+      logger.logInteraction({
+        phone: normalizedPhone,
+        role: registeredUser.role,
+        agency: registeredUser.agency,
+        message: msg.body || '[Mídia]',
+        responseSnippet: replyText,
+        mode: 'COPILOT'
       });
-      const chatSession = model.startChat({ history: sessionData.history });
 
-      const result = await retryWithBackoff(async () => {
-        return await chatSession.sendMessage(userMessage);
-      }, 2, 1000);
+    } else {
+      // ==========================================
+      //  FLUXO KIXI IA (CLIENTE)
+      // ==========================================
+      // Tratamento de fotos/documentos enviados por clientes para análise de crédito
+      if (msg.hasMedia && (msg.type === 'image' || msg.type === 'document')) {
+        console.log(`📸 [CLIENTE] Documento recebido de cliente [${maskPhone(normalizedPhone)}]`);
+        try {
+          const clientName = contact?.pushname || contact?.name || 'Cliente';
+          const notifyMsg =
+            `📄 *DOCUMENTO RECEBIDO - KIXI IA*\n\n` +
+            `👤 *Cliente:* ${clientName}\n` +
+            `📱 *Contacto:* wa.me/${normalizedPhone}\n\nDocumento em anexo:`;
 
-      botResponse = result.response.text();
-      // CRÍTICO: Comprimir histórico para texto leve antes de guardar em memória.
-      // chatSession.getHistory() devolve objetos pesados do SDK Gemini com
-      // candidates, safety ratings e metadados — não guardamos esses dados.
-      const rawHistory = await chatSession.getHistory();
-      sessionData.history = compressHistory(rawHistory).slice(-MAX_HISTORY_MESSAGES);
-      console.log(`[AI] Gemini response received from ${primaryModelName} (Length: ${botResponse.length} chars)`);
-    } catch (primaryErr) {
-      console.warn(`⚠️ [AI] Primary model ${primaryModelName} failed: ${primaryErr.message || primaryErr}. Trying fallback ${fallbackModelName}...`);
-      
-      const fallbackModel = ai.getGenerativeModel({
-        model: fallbackModelName,
-        systemInstruction: SYSTEM_INSTRUCTION
-      });
-      const fallbackSession = fallbackModel.startChat({ history: sessionData.history });
+          await client.sendMessage(MANAGER_NUMBER, notifyMsg);
+          await msg.forward(MANAGER_NUMBER);
 
-      const result = await retryWithBackoff(async () => {
-        return await fallbackSession.sendMessage(userMessage);
-      }, 2, 1000);
-
-      botResponse = result.response.text();
-      // CRÍTICO: Comprimir histórico para texto leve antes de guardar em memória.
-      const rawFallbackHistory = await fallbackSession.getHistory();
-      sessionData.history = compressHistory(rawFallbackHistory).slice(-MAX_HISTORY_MESSAGES);
-      console.log(`[AI] Gemini response received from fallback ${fallbackModelName} (Length: ${botResponse.length} chars)`);
-    }
-
-    // Detetar e processar lead
-    const leadRegex = /###LEAD_DATA###(.*?)###/;
-    const match = botResponse.match(leadRegex);
-    if (match) {
-      try {
-        const leadData = JSON.parse(match[1].trim());
-        leadData.telefone = contact?.id?.user || userId.split('@')[0];
-        if (leadData.nome && !sessionData.clientName) {
-          sessionData.clientName = leadData.nome;
+          replyText = `Recebemos o seu documento! 📋\n\nA nossa equipa irá analisar e entrará em contacto brevemente.\n\n📞 Apoio imediato: *+244 930 968 888*`;
+        } catch (err) {
+          console.error('❌ Erro ao encaminhar documento do cliente:', err);
+          replyText = 'Recebemos o ficheiro, mas houve um problema ao encaminhá-lo. Por favor contacte-nos pelo *+244 930 968 888*.';
         }
-        salvarLead(leadData);
-      } catch (e) {
-        console.error('❌ Erro ao decodificar lead:', e);
+      } else {
+        console.log(`👤 [CLIENTE] A processar mensagem de cliente [${maskPhone(normalizedPhone)}]`);
+        try { await chat?.sendStateTyping(); } catch (e) {}
+
+        replyText = await handleClientMessage(normalizedPhone, msg.body, contact || {});
+
+        logger.logInteraction({
+          phone: normalizedPhone,
+          role: ROLES.CLIENT,
+          agency: 'Geral',
+          message: msg.body,
+          responseSnippet: replyText,
+          mode: 'CLIENT'
+        });
       }
-      botResponse = botResponse.replace(leadRegex, '').trim();
     }
 
-    console.log(`[WHATSAPP] Attempting reply to [${userId}]...`);
+    if (replyText) {
+      // Simulação de digitação humana
+      const typingMs = Math.min(Math.max(replyText.length * 12, 600), 3000);
+      await new Promise(r => setTimeout(r, typingMs));
+      try { await chat?.clearState(); } catch (e) {}
 
-    // Simular digitação humana: "a escrever..." proporcional ao tamanho da resposta (800ms–4s)
-    try { await chat?.sendStateTyping(); } catch (e) {}
-    const typingMs = Math.min(Math.max(botResponse.length * 15, 800), 4000);
-    await new Promise(r => setTimeout(r, typingMs));
-    try { await chat?.clearState(); } catch (e) {}
+      await client.sendMessage(rawSender, replyText);
+      console.log(`📤 [WHATSAPP] Resposta enviada com sucesso para [${maskPhone(normalizedPhone)}]`);
+    }
 
-    await client.sendMessage(userId, botResponse);
-
-    console.log(`[WHATSAPP] Response sent successfully to [${userId}]`);
-    console.log(`📤 [WHATSAPP] Response snippet: "${botResponse.split('\n')[0].substring(0, 80)}..."`);
-    logMemory('After message sent');
-    // Sugestão de GC ao Node.js após cada resposta (reduz heap retido)
     if (global.gc) { try { global.gc(); } catch (e) {} }
 
   } catch (error) {
-    console.error('❌ [AI] Error processing message with Gemini:', error.message || error);
+    console.error('❌ [ROUTER] Erro ao processar mensagem:', error.message || error);
     try {
-      console.log(`[WHATSAPP] Sending fallback error message to [${userId}]...`);
-      await client.sendMessage(userId,
+      await client.sendMessage(rawSender,
         'De momento não consigo processar o seu pedido. Por favor, contacte-nos:\n\n' +
         '📞 *+244 930 968 888*\n' +
         '📧 *atendimento@kixicredito.ao*\n' +
         '🌐 *www.kixicredito.ao*'
       );
-      console.log(`[WHATSAPP] Fallback error message sent successfully`);
-    } catch (sendErr) {
-      console.error('❌ [WHATSAPP] Failed to send fallback error message:', sendErr.message || sendErr);
-    }
+    } catch (sendErr) {}
   } finally {
     try { await chat?.clearState(); } catch (e) {}
   }
 });
 
 // ============================================================
-//  SERVIDOR EXPRESS HTTP
-//  Inicia IMEDIATAMENTE — Render deteta o serviço como ativo
+//  SERVIDOR EXPRESS HTTP & HEALTH CHECK
 // ============================================================
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -761,12 +356,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 function renderQrPage(req, res) {
-  // Se o cliente solicitar explicitamente JSON via header ou parâmetro
   if (req.query.format === 'json' || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
-    const m = process.memoryUsage();
     return res.json({
       status: 'online',
-      service: 'KixiCredito Kixi IA WhatsApp Bot',
+      service: 'KixiCrédito Kixi IA + Copilot WhatsApp Bot',
       whatsapp: whatsappStatus,
       timestamp: new Date().toISOString()
     });
@@ -776,7 +369,7 @@ function renderQrPage(req, res) {
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <title>KixiCrédito S.A. — Kixi IA WhatsApp</title>
+  <title>KixiCrédito S.A. — Kixi IA + Copilot WhatsApp</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * { box-sizing: border-box; }
@@ -788,7 +381,7 @@ function renderQrPage(req, res) {
     .card {
       background: #111b21; border: 1px solid #222d34; padding: 2.5rem 2rem;
       border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      text-align: center; max-width: 440px; width: 90%;
+      text-align: center; max-width: 460px; width: 90%;
     }
     .brand { color: #00a884; font-size: 1.6rem; font-weight: 700; margin-bottom: 0.3rem; }
     .subtitle { color: #8696a0; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.4; }
@@ -816,13 +409,13 @@ function renderQrPage(req, res) {
 <body>
   <div class="card">
     <div class="brand">💚 KixiCrédito S.A.</div>
-    <div class="subtitle">Assistente Virtual Kixi IA — Ligação WhatsApp</div>
+    <div class="subtitle">Kixi IA + Internal Copilot — WhatsApp</div>
     
     <div id="loading-section" style="display: ${qrCodeUrl ? 'none' : (whatsappStatus === 'ready' ? 'none' : 'block')};">
       <div class="spinner"></div>
       <p style="color:#8696a0; font-size:0.9rem;" id="loading-msg">
         ${whatsappStatus === 'authenticated' || whatsappStatus === 'loading'
-          ? '⏳ Autenticado! A concluir sincronização e a aguardar sinal READY...'
+          ? '⏳ Autenticado! A concluir sincronização...'
           : 'A inicializar o cliente do WhatsApp... Por favor, aguarde.'}
       </p>
     </div>
@@ -830,9 +423,8 @@ function renderQrPage(req, res) {
     <div id="qr-section" style="display: ${qrCodeUrl && whatsappStatus === 'qr_ready' ? 'block' : 'none'};">
       <p style="color:#d1d7db; font-size:0.9rem; margin-bottom:0.5rem;">
         1. Abra o WhatsApp no telemóvel<br>
-        2. Toque em <b>Mais opções</b> ou <b>Definições</b><br>
-        3. Selecione <b>Dispositivos associados</b> &gt; <b>Associar um dispositivo</b><br>
-        4. Aponte a câmara para o código abaixo:
+        2. Toque em <b>Dispositivos associados</b> &gt; <b>Associar dispositivo</b><br>
+        3. Aponte a câmara para o código abaixo:
       </p>
       <div class="qr-container">
         <img id="qr-img" src="${qrCodeUrl || ''}" alt="WhatsApp QR Code" />
@@ -843,8 +435,8 @@ function renderQrPage(req, res) {
 
     <div id="success-section" style="display: ${whatsappStatus === 'ready' ? 'block' : 'none'};" class="success-box">
       <div class="success-icon">🚀</div>
-      <h3 style="margin:0 0 0.5rem 0; color:#00a884; font-size:1.3rem;">Kixi IA Conetada com Sucesso!</h3>
-      <p style="margin:0; font-size:0.92rem; color:#d1d7db;">O WhatsApp da KixiCrédito S.A. está online, READY e pronto para atender os clientes.</p>
+      <h3 style="margin:0 0 0.5rem 0; color:#00a884; font-size:1.3rem;">Kixi IA + Copilot Online!</h3>
+      <p style="margin:0; font-size:0.92rem; color:#d1d7db;">Atendimento automático a clientes e assistente interno de colaboradores prontos.</p>
     </div>
   </div>
 
@@ -870,25 +462,17 @@ function renderQrPage(req, res) {
           qrSec.style.display = 'none';
           successSec.style.display = 'none';
           loadingSec.style.display = 'block';
-          loadingMsg.innerText = '⏳ Autenticado! A concluir sincronização e a aguardar sinal READY (Status: ' + data.whatsapp + ')...';
+          loadingMsg.innerText = '⏳ Autenticado! A concluir sincronização (Status: ' + data.whatsapp + ')...';
         } else if (data.qrCodeAvailable && data.qrCodeUrl && data.whatsapp === 'qr_ready') {
           loadingSec.style.display = 'none';
           successSec.style.display = 'none';
           qrSec.style.display = 'block';
-          
           if (data.qrCodeUrl !== currentQr) {
             currentQr = data.qrCodeUrl;
             qrImg.src = data.qrCodeUrl;
           }
-        } else {
-          successSec.style.display = 'none';
-          qrSec.style.display = 'none';
-          loadingSec.style.display = 'block';
-          loadingMsg.innerText = 'Status: ' + data.whatsapp + '... Aguarde por favor.';
         }
-      } catch (e) {
-        console.error('Erro ao verificar status:', e);
-      }
+      } catch (e) {}
     }
     
     setInterval(checkStatus, 2500);
@@ -904,8 +488,13 @@ app.get('/health', (req, res) => {
   const m = process.memoryUsage();
   const isError = whatsappStatus === 'error';
   res.status(isError ? 500 : 200).json({
-    server: 'online',
+    status: isError ? 'error' : 'ok',
+    service: 'Kixi IA + Copilot WhatsApp',
     whatsapp: whatsappStatus,
+    ai: GEMINI_API_KEY ? 'configured' : 'missing_key',
+    database: 'connected',
+    registeredUsersCount: store.listUsers().length,
+    activeClientSessions: getActiveClientSessionsCount(),
     qrCodeAvailable: !!qrCodeUrl,
     qrCodeUrl: qrCodeUrl || null,
     lastError: lastError || null,
@@ -914,14 +503,11 @@ app.get('/health', (req, res) => {
       heapUsed_mb: (m.heapUsed / 1024 / 1024).toFixed(1),
       heapTotal_mb: (m.heapTotal / 1024 / 1024).toFixed(1)
     },
-    activeSessions: sessions.size,
     timestamp: new Date().toISOString()
   });
 });
 
-// ============================================================
-//  TRATAMENTO DE ERROS GLOBAIS
-// ============================================================
+// Tratamento de erros globais
 process.on('uncaughtException', (error) => {
   console.error('🔥 [ERRO CRÍTICO] Uncaught Exception:', error);
   logMemory('On uncaughtException');
@@ -931,21 +517,13 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🔥 [REJEIÇÃO NÃO TRATADA] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// ============================================================
-//  INICIALIZAÇÃO ASSÍNCRONA DO CLIENTE WHATSAPP
-//  Protegida por flag contra dupla inicialização acidental
-// ============================================================
+// Inicialização do WhatsApp Client
 let isInitializing = false;
-
 async function initWhatsAppClient() {
-  if (isInitializing) {
-    console.warn('⚠️ [WA] Initialization skipped: WhatsApp client is already initializing!');
-    return;
-  }
+  if (isInitializing) return;
   isInitializing = true;
 
-  console.log('[WHATSAPP] Starting client initialization...');
-  console.log('[PUPPETEER] Starting browser...');
+  console.log('[WHATSAPP] A inicializar cliente...');
   logProcessTreeMemory('BEFORE_CLIENT_INIT');
   try {
     await client.initialize();
@@ -955,21 +533,16 @@ async function initWhatsAppClient() {
     whatsappStatus = 'error';
     lastError = error.message || String(error);
     console.error('❌ [WHATSAPP] Erro na inicialização:', error);
-    logProcessTreeMemory('INIT_ERROR');
   }
 }
 
-// ============================================================
-//  ARRANQUE: HTTP SERVER PRIMEIRO, DEPOIS WHATSAPP
-// ============================================================
+// Arranque do Servidor
 logMemory('Startup');
-console.log('[SERVER] Starting HTTP server...');
 app.listen(PORT, () => {
-  console.log(`[SERVER] Listening on port ${PORT}`);
-  console.log(`[SERVER] Health: http://localhost:${PORT}/health`);
-  console.log(`[SERVER] QR Code: http://localhost:${PORT}/qr`);
+  console.log(`[SERVER] HTTP Server ativo na porta ${PORT}`);
+  console.log(`[SERVER] Health Check: http://localhost:${PORT}/health`);
+  console.log(`[SERVER] QR Code Web: http://localhost:${PORT}/qr`);
   logMemory('After HTTP server started');
 
-  // WhatsApp inicia assincronamente DEPOIS do servidor HTTP estar ativo
   initWhatsAppClient();
 });

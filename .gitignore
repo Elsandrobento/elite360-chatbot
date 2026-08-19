@@ -5,3 +5,7 @@ node_modules/
 session/
 session-kixi-ia/
 *.log
+scratch_*.js
+extract_temp.*
+extract_vision.*
+
