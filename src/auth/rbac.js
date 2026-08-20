@@ -153,3 +153,23 @@ export function isInternalStaff(user) {
   if (!user || user.status !== USER_STATUS.ACTIVE) return false;
   return [ROLES.AGENT, ROLES.MANAGER, ROLES.ADMIN].includes(user.role);
 }
+
+/**
+ * Retorna o nome amigável do papel em Português (CLIENTE, AGENTE, GESTOR, ADMIN).
+ * @param {string} role 
+ * @returns {string}
+ */
+export function getRoleDisplayName(role) {
+  switch (role) {
+    case ROLES.ADMIN:
+      return 'ADMIN';
+    case ROLES.MANAGER:
+      return 'GESTOR';
+    case ROLES.AGENT:
+      return 'AGENTE';
+    case ROLES.CLIENT:
+    default:
+      return 'CLIENTE';
+  }
+}
+

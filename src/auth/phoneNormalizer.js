@@ -4,24 +4,46 @@
  */
 
 /**
- * Normaliza qualquer formato de número de telefone para o formato padrão do sistema (apenas dígitos, com código de país 244 para Angola).
+ * Extrai valor bruto de string ou objeto de contacto/mensagem do WhatsApp.
+ * Suporta formatos:
+ * - String: "+244 933 220 903", "244933220903@c.us", "whatsapp:+244933220903", "933220903"
+ * - Objeto: { user: '244933220903' }, { _serialized: '244933220903@c.us' }, { id: '244933220903@c.us' }
  * 
- * Exemplos:
- * "+244 933 220 903" -> "244933220903"
- * "244933220903@c.us" -> "244933220903"
- * "933220903" -> "244933220903"
- * "244933220903" -> "244933220903"
- * "+244 (922) 380-558" -> "244922380558"
- * 
- * @param {string|number} rawPhone 
- * @returns {string} Número normalizado
+ * @param {string|number|Object} input 
+ * @returns {string}
  */
-export function normalizePhone(rawPhone) {
-  if (!rawPhone) return '';
+export function normalizePhone(input) {
+  if (!input) return '';
 
-  let phone = String(rawPhone).trim();
+  let phone = '';
 
-  // Se vier com sufixo do WhatsApp (@c.us, @s.whatsapp.net, @g.us)
+  if (typeof input === 'object') {
+    // Se for objeto Wid ou Contact do whatsapp-web.js
+    if (input.user && typeof input.user === 'string') {
+      phone = input.user;
+    } else if (input.number && typeof input.number === 'string') {
+      phone = input.number;
+    } else if (input._serialized && typeof input._serialized === 'string') {
+      phone = input._serialized;
+    } else if (input.id && typeof input.id === 'string') {
+      phone = input.id;
+    } else if (input.remote && typeof input.remote === 'string') {
+      phone = input.remote;
+    } else {
+      try {
+        phone = JSON.stringify(input);
+      } catch (e) {
+        phone = String(input);
+      }
+    }
+  } else {
+    phone = String(input).trim();
+  }
+
+  // Remove prefixos como "whatsapp:"
+  phone = phone.replace(/^whatsapp:/i, '');
+
+  // Se vier com sufixo do WhatsApp (@c.us, @s.whatsapp.net, @lid, @g.us)
   if (phone.includes('@')) {
     phone = phone.split('@')[0];
   }
@@ -33,6 +55,11 @@ export function normalizePhone(rawPhone) {
 
   // Se começar com 00244, remove os zeros iniciais
   if (phone.startsWith('00244')) {
+    phone = phone.slice(2);
+  }
+
+  // Se começar com 00 (outro DDI), remove os zeros iniciais
+  if (phone.startsWith('00')) {
     phone = phone.slice(2);
   }
 
@@ -64,3 +91,4 @@ export function formatPhoneForDisplay(phone) {
   }
   return norm ? `+${norm}` : 'N/D';
 }
+

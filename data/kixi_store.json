@@ -22,7 +22,7 @@
         "agency.operational_report"
       ],
       "created_at": "2026-08-19T13:16:21.254Z",
-      "updated_at": "2026-08-19T15:29:45.873Z"
+      "updated_at": "2026-08-20T08:21:37.495Z"
     },
     {
       "id": "usr_1787145381255_smc9u",
@@ -51,7 +51,7 @@
         "user.management"
       ],
       "created_at": "2026-08-19T13:16:21.255Z",
-      "updated_at": "2026-08-19T15:29:45.876Z"
+      "updated_at": "2026-08-20T08:21:37.496Z"
     },
     {
       "id": "usr_1787145381256_1qqqi",
@@ -69,10 +69,10 @@
         "process.guidance"
       ],
       "created_at": "2026-08-19T13:16:21.256Z",
-      "updated_at": "2026-08-19T15:29:45.877Z"
+      "updated_at": "2026-08-20T08:21:37.497Z"
     },
     {
-      "id": "usr_1787153385888_elpee",
+      "id": "usr_1787214097502_gbtmg",
       "phone": "244944111222",
       "name": "João Manuel",
       "role": "AGENT",
@@ -86,8 +86,8 @@
         "customer.preanalysis",
         "process.guidance"
       ],
-      "created_at": "2026-08-19T15:29:45.888Z",
-      "updated_at": "2026-08-19T15:29:45.889Z"
+      "created_at": "2026-08-20T08:21:37.502Z",
+      "updated_at": "2026-08-20T08:21:37.502Z"
     }
   ],
   "operational_logs": [
@@ -277,6 +277,54 @@
         "missingCount": 3
       },
       "status": "INCOMPLETE_DOCS"
+    },
+    {
+      "id": "log_1787213994238_c2n5l",
+      "timestamp": "2026-08-20T08:19:54.238Z",
+      "phone": "244933220903",
+      "role": "MANAGER",
+      "agency": "Mutamba",
+      "action": "CUSTOMER_PREANALYSIS",
+      "category": "KixiFácil",
+      "details": {
+        "product": "KixiFácil",
+        "amount": 500000,
+        "income": 250000,
+        "termMonths": 12
+      },
+      "status": "SUCCESS"
+    },
+    {
+      "id": "log_1787214083220_49gp7",
+      "timestamp": "2026-08-20T08:21:23.220Z",
+      "phone": "244933220903",
+      "role": "MANAGER",
+      "agency": "Mutamba",
+      "action": "CUSTOMER_PREANALYSIS",
+      "category": "KixiFácil",
+      "details": {
+        "product": "KixiFácil",
+        "amount": 500000,
+        "income": 250000,
+        "termMonths": 12
+      },
+      "status": "SUCCESS"
+    },
+    {
+      "id": "log_1787214097499_xp8eb",
+      "timestamp": "2026-08-20T08:21:37.499Z",
+      "phone": "244933220903",
+      "role": "MANAGER",
+      "agency": "Mutamba",
+      "action": "CUSTOMER_PREANALYSIS",
+      "category": "KixiFácil",
+      "details": {
+        "product": "KixiFácil",
+        "amount": 500000,
+        "income": 250000,
+        "termMonths": 12
+      },
+      "status": "SUCCESS"
     }
   ],
   "leads": [],

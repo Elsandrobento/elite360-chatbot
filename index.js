@@ -8,7 +8,7 @@ import { execSync } from 'child_process';
 
 // Módulos do Sistema KIXI IA + KIXI COPILOT
 import { normalizePhone, formatPhoneForDisplay } from './src/auth/phoneNormalizer.js';
-import { isInternalStaff, ROLES } from './src/auth/rbac.js';
+import { isInternalStaff, ROLES, USER_STATUS, getRoleDisplayName } from './src/auth/rbac.js';
 import { store } from './src/database/store.js';
 import { seedInitialUsers } from './src/database/seed.js';
 import { handleCopilotMessage } from './src/copilot/copilotHandler.js';
@@ -257,9 +257,15 @@ client.on('message', async (msg) => {
     rawSender,
     contact?.number,
     contact?.id?.user,
+    contact?.id?._serialized,
     msg.author,
+    msg.id?.remote,
+    msg.id?.participant,
     msg._data?.from,
-    msg._data?.author
+    msg._data?.author,
+    msg._data?.id?.remote,
+    msg._data?.id?.participant,
+    msg._data?.sender
   ].filter(Boolean);
 
   let registeredUser = null;
@@ -274,125 +280,57 @@ client.on('message', async (msg) => {
         normalizedPhone = norm;
         break;
       }
+      if (!normalizedPhone || normalizedPhone.length !== 12) {
+        normalizedPhone = norm;
+      }
     }
   }
 
+  // Se não encontrar na base, a role é estritamente CLIENTE
   const isStaff = isInternalStaff(registeredUser);
+  const role = registeredUser ? registeredUser.role : ROLES.CLIENT;
+  const roleDisplay = getRoleDisplayName(role);
+
+  // ============================================================
+  //  LOGS ESTRUTURADOS DE AUDITORIA E DEBUG (SEGURO - SEM MENSAGENS PRIVADAS)
+  // ============================================================
+  console.log(`\n[INCOMING]`);
+  console.log(`from=${rawSender}`);
+  console.log(`\n[AUTH]`);
+  console.log(`rawFrom=${rawSender}`);
+  console.log(`normalized=${normalizedPhone}`);
+  console.log(`role=${roleDisplay}`);
+  console.log(`user=${registeredUser?.name || 'Cliente Externo'}`);
+  console.log(`agency=${registeredUser?.agency || 'Geral'}`);
+  console.log(`authorized=${isStaff}`);
+  console.log(`\n[ROUTER]`);
+  console.log(`mode=${role}`);
+  console.log(`\n[AI]`);
+  console.log(`knowledge_source=official_documents`);
+  console.log(`fallback=${isStaff ? 'internal_controlled_error' : 'external_customer_support'}\n`);
+
   const cleanBody = (msg.body || '').trim().toLowerCase();
 
-  // ============================================================
-  //  COMANDOS RÁPIDOS DE ALTERNÂNCIA DE MODO & TESTE (#agente, #gestor, #admin, #cliente)
-  // ============================================================
-  if (cleanBody === '#solene' || cleanBody === '#agente' || cleanBody === '!agente' || cleanBody === '#staff') {
-    const newStaff = store.addUserOrUpdate({
-      phone: normalizedPhone,
-      name: 'Solene Silva (Agente)',
-      role: ROLES.AGENT,
-      agency: 'Zango',
-      status: USER_STATUS.ACTIVE
-    });
-
-    const welcomeStaff =
-      `✅ *MODO KIXI COPILOT ATIVADO!*\n\n` +
-      `👤 *Utilizador:* ${newStaff.name}\n` +
-      `💼 *Função:* AGENT (Agente de Crédito)\n` +
-      `🏢 *Agência:* ${newStaff.agency}\n` +
-      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
-      `📌 *Funcionalidades Disponíveis:*\n` +
-      `• *Dúvidas Oficiais:* "Quais são os requisitos do KixiNegócio?"\n` +
-      `• *Checklist de Documentos:* "Verificar documentação" ou descreva os documentos recolhidos.\n` +
-      `• *Simulação Prévia:* "Cliente recebe 250.000 Kz e quer 500.000 Kz a 12 meses."\n` +
-      `• *Taxas e Prazos:* "Qual a taxa do KixiAgronegócio?"\n\n` +
-      `_Para voltar ao atendimento de cliente, envie #cliente._`;
-
-    await client.sendMessage(rawSender, welcomeStaff);
-    return;
-  }
-
-  if (cleanBody === '#filipe' || cleanBody === '#gestor' || cleanBody === '!gestor' || cleanBody === '#manager') {
-    const newManager = store.addUserOrUpdate({
-      phone: normalizedPhone,
-      name: 'Filipe Binza (Gestor)',
-      role: ROLES.MANAGER,
-      agency: 'Mutamba',
-      status: USER_STATUS.ACTIVE
-    });
-
-    const welcomeManager =
-      `✅ *MODO GESTOR DE AGÊNCIA ATIVADO!*\n\n` +
-      `👤 *Utilizador:* ${newManager.name}\n` +
-      `💼 *Função:* MANAGER (Gestor de Agência)\n` +
-      `🏢 *Agência:* ${newManager.agency}\n` +
-      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
-      `📊 *Funcionalidades de Gestão:*\n` +
-      `• *Resumo da Agência:* "Resumo operacional da agência"\n` +
-      `• *Dúvidas da Equipa:* "Quais as principais dúvidas dos agentes?"\n` +
-      `• *Processos:* "Quantos casos tiveram documentação incompleta?"\n\n` +
-      `_Para voltar ao atendimento de cliente, envie #cliente._`;
-
-    await client.sendMessage(rawSender, welcomeManager);
-    return;
-  }
-
-  if (cleanBody === '#tirso' || cleanBody === '#admin' || cleanBody === '!admin') {
-    const newAdmin = store.addUserOrUpdate({
-      phone: normalizedPhone,
-      name: 'Dr. Tirso (Administrador)',
-      role: ROLES.ADMIN,
-      agency: 'GLOBAL',
-      status: USER_STATUS.ACTIVE
-    });
-
-    const welcomeAdmin =
-      `✅ *MODO ADMINISTRADOR GLOBAL ATIVADO!*\n\n` +
-      `👤 *Utilizador:* ${newAdmin.name}\n` +
-      `💼 *Função:* ADMIN (Administrador Global)\n` +
-      `🏢 *Agência:* GLOBAL\n` +
-      `🟢 *Estado:* Autenticado com Sucesso\n\n` +
-      `⚙️ *Ações Administrativas:*\n` +
-      `• *Visão Global:* "Relatório global de todas as agências"\n` +
-      `• *Utilizadores:* "Consultar utilizadores activos"\n` +
-      `• *Registo:* "Adicionar [Nome], [Telefone], [Função], [Agência]"\n\n` +
-      `_Para voltar ao atendimento de cliente, envie #cliente._`;
-
-    await client.sendMessage(rawSender, welcomeAdmin);
-    return;
-  }
-
-  if (cleanBody === '#cliente' || cleanBody === '#sair' || cleanBody === '#logout' || cleanBody === '!cliente') {
-    store.deleteUser(normalizedPhone);
-    const welcomeClient =
-      `👋 *MODO CLIENTE ATIVADO*\n\n` +
-      `Bem-vindo ao canal público de atendimento da *KixiCrédito S.A.*!\n\n` +
-      `Como podemos ajudar com o seu financiamento hoje?`;
-
-    await client.sendMessage(rawSender, welcomeClient);
-    return;
-  }
-
+  // Consulta de perfil ativo
   if (cleanBody === '#perfil' || cleanBody === '#status' || cleanBody === '#quem_sou') {
     if (isStaff) {
       await client.sendMessage(rawSender,
-        `👤 *PERFIL ATUAL — KIXI COPILOT*\n\n` +
+        `👤 *PERFIL AUTORIZADO — KIXI COPILOT*\n\n` +
         `• *Nome:* ${registeredUser.name}\n` +
         `• *Telefone:* ${formatPhoneForDisplay(registeredUser.phone)}\n` +
-        `• *Função:* ${registeredUser.role}\n` +
+        `• *Função:* ${registeredUser.role} (${roleDisplay})\n` +
         `• *Agência:* ${registeredUser.agency}\n` +
-        `• *Estado:* ${registeredUser.status}\n\n` +
-        `_Comandos rápidos: #agente, #gestor, #admin, #cliente_`
+        `• *Estado:* ${registeredUser.status}`
       );
     } else {
       await client.sendMessage(rawSender,
-        `👤 *PERFIL ATUAL — CLIENTE*\n\n` +
+        `👤 *PERFIL — ATENDIMENTO AO CLIENTE*\n\n` +
         `• *Telefone:* ${formatPhoneForDisplay(normalizedPhone)}\n` +
-        `• *Tipo de Acesso:* Público (Atendimento ao Cliente)\n\n` +
-        `_Para alternar para perfil interno, envie #agente, #gestor ou #admin._`
+        `• *Tipo de Acesso:* CLIENTE (Atendimento Público)`
       );
     }
     return;
   }
-
-  console.log(`\n📥 [MENSAGEM RECEBIDA] De: ${maskPhone(normalizedPhone)} | Tipo: ${msg.type} | Staff: ${isStaff ? `${registeredUser.role} (${registeredUser.name})` : 'CLIENT'}`);
 
   try {
     let replyText = null;
@@ -461,7 +399,7 @@ client.on('message', async (msg) => {
       try { await chat?.clearState(); } catch (e) {}
 
       await client.sendMessage(rawSender, replyText);
-      console.log(`📤 [WHATSAPP] Resposta enviada com sucesso para [${maskPhone(normalizedPhone)}]`);
+      console.log(`📤 [WHATSAPP] Resposta enviada com sucesso para [${maskPhone(normalizedPhone)}] (${roleDisplay})`);
     }
 
     if (global.gc) { try { global.gc(); } catch (e) {} }
@@ -469,12 +407,18 @@ client.on('message', async (msg) => {
   } catch (error) {
     console.error('❌ [ROUTER] Erro ao processar mensagem:', error.message || error);
     try {
-      await client.sendMessage(rawSender,
-        'De momento não consigo processar o seu pedido. Por favor, contacte-nos:\n\n' +
-        '📞 *+244 930 968 888*\n' +
-        '📧 *atendimento@kixicredito.ao*\n' +
-        '🌐 *www.kixicredito.ao*'
-      );
+      if (isStaff) {
+        await client.sendMessage(rawSender,
+          '⚠️ Ocorreu um erro temporário no processamento interno do Copilot. Por favor tente novamente.'
+        );
+      } else {
+        await client.sendMessage(rawSender,
+          'De momento não foi possível processar o seu pedido. Por favor tente novamente mais tarde ou contacte:\n\n' +
+          '📞 *+244 930 968 888*\n' +
+          '📧 *atendimento@kixicredito.ao*\n' +
+          '🌐 *www.kixicredito.ao*'
+        );
+      }
     } catch (sendErr) {}
   } finally {
     try { await chat?.clearState(); } catch (e) {}
